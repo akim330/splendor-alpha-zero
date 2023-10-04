@@ -250,13 +250,14 @@ class MCTS():
             self.Vs[s] = valids
             # print(f"STORING for player {player}, {m_or_b}")
             # print(f"KEY: {s}")
+
             # print(f"CANONICAL: {canonicalBoard}")
             # print(f"STORED: {self.Vs[s]}")
 
             # Initialize N at 0 because this is the first time we're seeing this state for this tree
             # (will get incremented to 1 later in this iteration)
             self.Ns[s] = 0
-            self.log(f"{tabs}MCTS: Returning value {-v}")
+            self.log(f"{tabs}MCTS: NN returns value {v} so MCTS returns {-v}")
             return -v
 
         self.log(f"{tabs}MCTS: already have NN-policy ")

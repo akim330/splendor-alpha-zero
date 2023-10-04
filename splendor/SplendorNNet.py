@@ -18,7 +18,8 @@ class SplendorNNet(nn.Module):
         super(SplendorNNet, self).__init__()
 
         self.dense1 = nn.Linear(self.input_size, 512)
-        self.dense2 = nn.Linear(512, 256)
+        self.dense2 = nn.Linear(512, 512)
+        self.dense3 = nn.Linear(512, 256)
         self.layer_to_action = nn.Linear(256, self.action_size)
         self.layer_to_value = nn.Linear(256, 1)
 
@@ -61,6 +62,7 @@ class SplendorNNet(nn.Module):
 
         s = F.relu(self.dense1(s))
         s = F.relu(self.dense2(s))
+        s = F.relu(self.dense3(s))
 
         pi = self.layer_to_action(s)
         v = self.layer_to_value(s)

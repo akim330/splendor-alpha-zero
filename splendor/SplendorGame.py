@@ -22,6 +22,8 @@ import os
 n_cards = len(level_1_cards) + len(level_2_cards) + len(level_3_cards)
 n_cards2 = n_cards * 2
 
+target_score = 1
+
 take_coins_actions = ['wug', 'wur', 'wuk', 'wgr', 'wgk', 'wrk', 'ugr', 'ugk', 'urk', 'grk', 'wu', 'wg', 'wr', 'wk', 'ug',
                       'ur', 'uk', 'gr', 'gk', 'rk', 'w', 'u', 'g', 'r', 'k', 'ww', 'uu', 'gg', 'rr', 'kk', '']
 
@@ -58,7 +60,7 @@ class SplendorGame():
     # def getSquarePiece(piece):
     #     return SplendorGame.square_content[piece]
 
-    def __init__(self, verbose=False, output = "print", debug_file_path = None, display_time = False):
+    def __init__(self, verbose=False, output = "print", debug_file_path = None, display_time = False, randomize = True):
         self.verbose = verbose
         self.cards = level_1_cards | level_2_cards | level_3_cards
 
@@ -68,6 +70,8 @@ class SplendorGame():
         self.states = {}
         self.output = output
         self.debug_file_path = debug_file_path
+
+        self.randomize = randomize
 
         self.current_valid_moves = None
 
@@ -124,9 +128,10 @@ class SplendorGame():
         id_list2 = list(range(n_level_1_cards, n_level_1_cards + n_level_2_cards))
         id_list3 = list(range(n_level_1_cards + n_level_2_cards, n_level_1_cards + n_level_2_cards + n_level_3_cards))
 
-        random.shuffle(id_list1)
-        random.shuffle(id_list2)
-        random.shuffle(id_list3)
+        if self.randomize:
+            random.shuffle(id_list1)
+            random.shuffle(id_list2)
+            random.shuffle(id_list3)
 
         time1 = time.time()
 
@@ -247,7 +252,8 @@ class SplendorGame():
 
         for level in [1, 2, 3]:
             l = list(self.states['main'].id_decks[level])
-            random.shuffle(l)
+            if self.randomize:
+                random.shuffle(l)
             id_decks[level] = deque(l)
 
             # temp_storage = []
@@ -802,7 +808,7 @@ class SplendorGame():
         if player == 1:
             return 0
         if player == 2:  # Can only end if player 2's turn (assuming player 1 went first)
-            if self.states[m_or_b].scores[1] >= 15 or self.states[m_or_b].scores[2] >= 15:
+            if self.states[m_or_b].scores[1] >= target_score or self.states[m_or_b].scores[2] >= target_score:
                 if self.states[m_or_b].scores[1] == self.states[m_or_b].scores[2]:
                     if self.dict_values_sum(self.states[m_or_b].perma_gems[player]) >= self.dict_values_sum(
                             self.states[m_or_b].perma_gems[self.switch_player(player)]):
@@ -998,6 +1004,155 @@ class SplendorGame():
         Available: {' | '.join([str(noble) for noble in np.array(nobles_list)[np.array(self.states[m_or_b].nobles_board).astype(bool)]])}
         Player 1: {' | '.join([str(noble) for noble in self.states[m_or_b].gained_nobles[1]])}
         Player 2: {' | '.join([str(noble) for noble in self.states[m_or_b].gained_nobles[2]])}"""
+
+    def convert_action_to_readable(self, a):
+        if a < self.n_cards:
+            return f"Buy {self.cards[a]}"
+        elif a < self.n_cards * 2:
+            return f"Reserve {self.cards[a - self.n_cards]}"
+        elif a == self.n_cards * 2:
+            return "Reserve random 1"
+        elif a == self.n_cards * 2 + 1:
+            return "Reserve random 2"
+        elif a == self.n_cards * 2 + 2:
+            return "Reserve random 3"
+        else:
+            return take_coins_action_dict[a]
+
+    def display_state_external(self, state, just_print = False):
+        level_1_cards = []
+        level_2_cards = []
+        level_3_cards = []
+
+        tabs = '\t\t'
+
+
+
+        # Board
+        for i in np.where(state[:self.n_cards] == 1)[0]:
+            if i < self.n_level_1_cards:
+                level_1_cards.append(self.cards[i])
+            elif i < self.n_level_1_cards + self.n_level_2_cards:
+                level_2_cards.append(self.cards[i])
+            elif i < self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards:
+                level_3_cards.append(self.cards[i])
+            else:
+                raise Exception(f"Invalid card i {i}")
+
+        # Coins left
+        color_strs = []
+        coins_1 = state[(self.n_cards * 3 + 10):(self.n_cards * 3 + 16)]
+        coins_2 = state[(self.n_cards * 3 + 16):(self.n_cards * 3 + 22)]
+
+        for i, color in enumerate('wugrk'):
+            coins_left = 4 - coins_1[i] - coins_2[i]
+            color_strs.append(f"{coins_left}{color}")
+
+        color_strs.append(f"{5 - coins_1[5] - coins_2[5]}y")
+
+        # Make gem / coin strings
+        s = ""
+        for player in [1, 2]:
+            if player == 1:
+                s += f"""
+                Player:
+                """
+                gems = state[(self.n_cards * 3): (self.n_cards * 3 + 5)]
+                coins = state[(self.n_cards * 3 + 10): (self.n_cards * 3 + 16)]
+            else:
+                s += f"""
+                Opponent:
+                """
+                gems = state[(self.n_cards * 3 + 5): (self.n_cards * 3 + 10)]
+                coins = state[(self.n_cards * 3 + 16): (self.n_cards * 3 + 22)]
+
+            for i, color in enumerate('wugrk'):
+                if gems[i] > 0:
+                    perma_gem_str = f"[{gems[i]}]"
+                else:
+                    perma_gem_str = ""
+                s += f""" {color.upper()}: {perma_gem_str}{coins[i]} """
+            s += f""" Y: {coins[5]} """
+
+        # Reserved cards
+        p1_cards = []
+        p2_cards = []
+
+        for i in np.where(state[self.n_cards:(self.n_cards * 2)] == 1)[0]:
+            p1_cards.append(self.cards[i])
+        for i in np.where(state[(self.n_cards * 2):(self.n_cards * 3)] == 1)[0]:
+            p2_cards.append(self.cards[i])
+
+        if just_print:
+            print(f"""
+            {tabs}Scores:
+            {tabs}    1: {state[self.n_cards * 3 + 22]} | 2: {state[self.n_cards * 3 + 23]}
+            {tabs}
+            {tabs}Board:
+            {tabs}    Level 3: {' | '.join([str(card) for card in level_3_cards])}
+            {tabs}    Level 2: {' | '.join([str(card) for card in level_2_cards])}
+            {tabs}    Level 1: {' | '.join([str(card) for card in level_1_cards])}
+            {tabs}
+            {tabs}Nobles:
+            {tabs}      Available: {' | '.join([str(noble) for noble in np.array(nobles_list)[np.array(state[(self.n_cards * 3 + 25):(self.n_cards * 3 + 35)]).astype(bool)]])}
+            {tabs}    
+            {tabs}Coins left:
+            {tabs}    {' '.join(color_strs)}
+            {tabs}
+            {tabs}Player coins / gems: 
+            {tabs}    {s}
+            {tabs}    
+            {tabs}Reserved:
+            {tabs}     Player 1: {' | '.join([str(card) for card in p1_cards])}
+            {tabs}     Player 2: {' | '.join([str(card) for card in p2_cards])}
+            """)
+        else:
+            self.log(f"""
+            {tabs}Scores:
+            {tabs}    1: {state[self.n_cards * 3 + 22]} | 2: {state[self.n_cards * 3 + 23]}
+            {tabs}
+            {tabs}Board:
+            {tabs}    Level 3: {' | '.join([str(card) for card in level_3_cards])}
+            {tabs}    Level 2: {' | '.join([str(card) for card in level_2_cards])}
+            {tabs}    Level 1: {' | '.join([str(card) for card in level_1_cards])}
+            {tabs}
+            {tabs}Nobles:
+            {tabs}      Available: {' | '.join([str(noble) for noble in np.array(nobles_list)[np.array(state[(self.n_cards * 3 + 25):(self.n_cards * 3 + 35)]).astype(bool)]])}
+            {tabs}    
+            {tabs}Coins left:
+            {tabs}    {' '.join(color_strs)}
+            {tabs}
+            {tabs}Player coins / gems: 
+            {tabs}    {s}
+            {tabs}    
+            {tabs}Reserved:
+            {tabs}     Player 1: {' | '.join([str(card) for card in p1_cards])}
+            {tabs}     Player 2: {' | '.join([str(card) for card in p2_cards])}
+            """)
+
+
+    def display_training_example(self, training_example):
+        tabs = '\t\t'
+
+        state = training_example[0]
+        pi = training_example[1]
+        r = training_example[2]
+
+        # policy string
+        policies = []
+        for i, p in enumerate(pi):
+            if p != 0:
+                policies.append((i, p))
+        policy_strs = [f"{self.convert_action_to_readable(el[0])}: {el[1]}" for el in sorted(policies, key=lambda x: x[1], reverse=True)]
+
+        self.log(f"""
+        {tabs}  POLICY: {', '.join(policy_strs)}
+        {tabs}  R: {r}
+        """)
+
+        self.display_state_external(state)
+
+
 
     def display_game_state(self, m_or_b):
         start_time = time.time()

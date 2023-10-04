@@ -18,7 +18,7 @@ args = dotdict({
     'tempThreshold': 15,        #
     'updateThreshold': 0.6,     # During arena playoff, new neural net will be accepted if threshold or more of games are won.
     'maxlenOfQueue': 200000,    # Number of game examples to train the neural networks.
-    'numMCTSSims': 25,          # Number of games moves for MCTS to simulate.
+    'numMCTSSims': 50,          # Number of games moves for MCTS to simulate.
     'arenaCompare': 40,         # Number of games to play during arena play to determine if new net will be accepted.
     'cpuct': 1,
 
@@ -36,6 +36,7 @@ def main(verbose = False):
     output = "file"
     display_time = False
     display_all = False
+    randomize = False
 
     existing_files = os.listdir(debug_log_folder)
     existing_log_files = [f for f in existing_files if f.endswith('.txt')]
@@ -53,7 +54,7 @@ def main(verbose = False):
     print(f"Logging at {debug_file_path}")
 
     log.info('Loading %s...', Game.__name__)
-    g = Game(verbose=verbose, output = output, debug_file_path = debug_file_path, display_time = display_time)
+    g = Game(verbose=verbose, output = output, debug_file_path = debug_file_path, display_time = display_time, randomize = randomize)
 
     log.info('Loading %s...', nn.__name__)
     nnet = nn(g, verbose=verbose, output = output, debug_file_path = debug_file_path)

@@ -129,12 +129,25 @@ class Coach():
             self.times['get_game_ended'] += time4 - time3
 
             if r == -2:
-                # Game ended on 2 consecutive do-nothings so everyone loses
-                return [(x[0], x[2], -1) for x in trainExamples]
+                # Game ended on 2 consecutive do-nothings so whoever has the highest score wins
+
+                if self.game.states[m_or_b].scores[self.curPlayer] > self.game.states[m_or_b].scores[3 - self.curPlayer]:
+                    r = 1
+                elif self.game.states[m_or_b].scores[3 - self.curPlayer] - self.game.states[m_or_b].scores[self.curPlayer]:
+                    r = -1
+                else:
+                    return [(x[0], x[2], -1) for x in trainExamples]
+
+                return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
+
 
             elif r != 0:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
 
+    def explainTrainExamples(self, iterationTrainExamples):
+        for i, trainExample in enumerate(iterationTrainExamples):
+            self.log(f"########### TRAIN EXAMPLE {i} ###############")
+            self.game.display_training_example(trainExample)
 
 
     def learn(self):
@@ -189,6 +202,8 @@ class Coach():
 
                 # save the iteration examples to the history
                 self.trainExamplesHistory.append(iterationTrainExamples)
+
+                self.explainTrainExamples(iterationTrainExamples)
 
             # If too many iterationTrainExamples stored, remove oldest entry in trainExampleshistory
             if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
@@ -246,6 +261,22 @@ class Coach():
                 log.info('ACCEPTING NEW MODEL')
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
+
+                self.log(f"""######### NN TEST ##############""")
+
+                # Pick random initial state
+
+                # Pick random mid state
+
+                # Pick mid position obviously favoring player
+
+                # Pick mid position obviously favoring opponent
+
+                # Pick end position very close to victory
+
+                # Pick end position very close to defeat
+
+                self.log(f"""######### NN TEST ##############""")
 
 
     def getCheckpointFile(self, iteration):
