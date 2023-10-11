@@ -37,9 +37,14 @@ def main(verbose = False):
     display_time = False
     display_all = False
     randomize = False
+    nn_deep_dive = True
 
     existing_files = os.listdir(debug_log_folder)
     existing_log_files = [f for f in existing_files if f.endswith('.txt')]
+
+    # Truncate file
+    with open("./logs/init_state_examples.txt", 'w'):
+        pass
 
     def get_num(s):
         try:
@@ -57,7 +62,7 @@ def main(verbose = False):
     g = Game(verbose=verbose, output = output, debug_file_path = debug_file_path, display_time = display_time, randomize = randomize)
 
     log.info('Loading %s...', nn.__name__)
-    nnet = nn(g, verbose=verbose, output = output, debug_file_path = debug_file_path)
+    nnet = nn(g, verbose=verbose, output = output, debug_file_path = debug_file_path, nn_deep_dive = nn_deep_dive)
 
     if args.load_model:
         log.info('Loading checkpoint "%s/%s"...', args.load_folder_file[0], args.load_folder_file[1])
@@ -66,7 +71,7 @@ def main(verbose = False):
         log.warning('Not loading a checkpoint!')
 
     log.info('Loading the Coach...')
-    c = Coach(g, nnet, args, verbose=verbose, output = output, debug_file_path = debug_file_path, display_time = display_time, display_all=display_all)
+    c = Coach(g, nnet, args, verbose=verbose, output = output, debug_file_path = debug_file_path, display_time = display_time, display_all=display_all, nn_deep_dive = nn_deep_dive)
 
     if args.load_model:
         log.info("Loading 'trainExamples' from file...")

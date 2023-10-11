@@ -39,7 +39,6 @@ for action in take_coins_action_dict:
 row_count = 4
 
 randomize_branch = False
-seed = 1
 
 class SplendorGameState():
     def __init__(self, id_decks, board, reserved, nobles_board, coins, perma_gems, scores, gained_nobles,
@@ -173,7 +172,10 @@ class SplendorGame():
         n_nobles = len(nobles_list)
         nobles_board = np.zeros(n_nobles, dtype=int)
         n_to_sample = np.min([3, n_nobles])
-        nobles_board[random.sample(range(n_nobles), n_to_sample)] = 1
+        if self.randomize:
+            nobles_board[random.sample(range(n_nobles), n_to_sample)] = 1
+        else:
+            nobles_board[[0, 1, 2]] = 1
 
         # Player coins
         coins = {

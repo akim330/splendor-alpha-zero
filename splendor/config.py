@@ -139,11 +139,12 @@ level_1_cards_all = {
             w=1, u=1, g=1, r=1, k=0),
     1: Card(level=1, color="k", pv=0,
             w=1, u=2, g=1, r=1, k=0),
+    31: Card(level=1, color="g", pv=1,
+             w=0, u=0, g=0, r=0, k=4),
 
     2: Card(level=1, color="k", pv=0,
             w=2, u=2, g=0, r=1, k=0),
-    31: Card(level=1, color="g", pv=1,
-             w=0, u=0, g=0, r=0, k=4),
+
     3: Card(level=1, color="k", pv=0,
             w=0, u=0, g=1, r=3, k=1),
     4: Card(level=1, color="k", pv=0,

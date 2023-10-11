@@ -26,10 +26,12 @@ args = dotdict({
 
 
 class NNetWrapper(NeuralNet):
-    def __init__(self, game, verbose = False, output = "print", debug_file_path = None):
+    def __init__(self, game, verbose = False, output = "print", debug_file_path = None, nn_deep_dive = False):
         self.nnet = onnet(game, args)
         # self.board_x, self.board_y = game.getBoardSize()
         self.action_size = game.getActionSize()
+
+        self.nn_deep_dive = nn_deep_dive
 
         self.verbose = verbose
         if args.cuda:

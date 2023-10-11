@@ -21,7 +21,7 @@ class Coach():
     in Game and NeuralNet. args are specified in main.py.
     """
 
-    def __init__(self, game, nnet, args, verbose, output = 'print', debug_file_path = None, display_time = False, display_all = False):
+    def __init__(self, game, nnet, args, verbose, output = 'print', debug_file_path = None, display_time = False, display_all = False, nn_deep_dive = False):
         self.game = game
         self.nnet = nnet
         self.pnet = self.nnet.__class__(self.game)  # the competitor network
@@ -31,8 +31,17 @@ class Coach():
         self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
         self.verbose = verbose
 
+        self.nn_deep_dive = nn_deep_dive
+
         self.output = output
         self.debug_file_path = debug_file_path
+
+        self.first_action = None
+        self.first_nn_value = None
+        self.first_prob_strs = None
+        self.first_temp = None
+
+        self.first_action_dict = {}
 
         self.times = {}
 
@@ -49,9 +58,11 @@ class Coach():
             'get_game_ended': 0
         }
 
-    def log(self, s):
+    def log(self, s, debug_file_path = None):
+        if not debug_file_path:
+            debug_file_path = self.debug_file_path
         if self.output == 'file':
-            with open(self.debug_file_path, 'a') as f:
+            with open(debug_file_path, 'a') as f:
                 f.write(f"{s}\n")
 
         elif self.output == 'print':
@@ -108,16 +119,25 @@ class Coach():
             action = np.random.choice(len(pi), p=pi)
 
             strs = []
-            for i, a in enumerate(pi):
-                if pi[i] != 0:
-                    strs.append(f"({i}, {pi[i]})")
+            for i, p in sorted(list(enumerate(pi)), key = lambda pair: pair[1], reverse=True):
+                if p != 0:
+                    strs.append(f"({self.game.convert_action_to_readable(i)}, {round(p, 3)})")
 
             if self.verbose:
                 self.log(f"\t***** MCTS: DONE for one action! Based on final probs, take action: {action} *****")
                 self.log(f"\tpi: {', '.join(strs)}")
 
+
+
             board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action, m_or_b)
             time3 = time.time()
+
+            if episodeStep == 1:
+                self.first_temp = temp
+                self.first_prob_strs = strs
+                self.first_action = action
+                self.first_nn_value = self.nnet.predict(self.game.getCanonicalForm(None, self.curPlayer, m_or_b))
+                # self.log(f"NN (next line) on state: {self.game.getCanonicalForm(None, self.curPlayer, m_or_b)}", debug_file_path="./logs/init_state_examples.txt")
 
             r = self.game.getGameEnded(board, self.curPlayer, m_or_b)
 
@@ -158,6 +178,7 @@ class Coach():
         It then pits the new neural network against the old one and accepts it
         only if it wins >= updateThreshold fraction of games.
         """
+        accepted = True
 
         for i in range(1, self.args.numIters + 1):
             # bookkeeping
@@ -166,6 +187,32 @@ class Coach():
             self.log(f"##### COACH GLOBAL ROUND {i} #####")
             self.log(f"##################################")
 
+            self.game.reset_main()
+
+
+            if accepted:
+                pi, v = self.nnet.predict(self.game.getCanonicalForm(None, 1, "main"))
+                # policy string
+                policies = []
+                for i, p in enumerate(pi):
+                    if p != 0:
+                        policies.append((i, p))
+                policy_strs = [f"{self.game.convert_action_to_readable(el[0])}: {round(el[1], 3)}" for el in
+                               sorted(policies, key=lambda x: x[1], reverse=True)][:5]
+
+                self.log(f"""
+                ########### NEW NN!!!!!! #############
+                
+                Policy: {','.join(policy_strs)}
+                    on state: {self.game.getCanonicalForm(None, 1, "main")}
+                """, debug_file_path="./logs/init_state_examples.txt")
+
+            sorted_data = dict(sorted(self.first_action_dict.items(), key=lambda item: item[1][2], reverse=True))
+
+            self.log(f"""
+            ########### NEW ROUND #############
+            {sorted_data}
+            """, debug_file_path="./logs/init_state_examples.txt")
 
             # examples of the iteration
             if not self.skipFirstSelfPlay or i > 1:
@@ -181,9 +228,7 @@ class Coach():
                         self.verbose = True
                     self.game.verbose = self.verbose
 
-                    # Truncate file
-                    with open(self.debug_file_path, 'w'):
-                        pass
+
 
                     self.log(f"##### COACH SELF-PLAY GAME {j} #####")
 
@@ -192,7 +237,48 @@ class Coach():
 
                     # Run an episode of self-play
                     start_time = time.time()
-                    iterationTrainExamples += self.executeEpisode()
+                    currentTrainExamples = self.executeEpisode()
+
+                    pi = currentTrainExamples[0][1]
+                    r = currentTrainExamples[0][2]
+
+                    # policy string
+                    policies = []
+                    for i, p in enumerate(pi):
+                        if p != 0:
+                            policies.append((i, p))
+                    policy_strs = [f"{self.game.convert_action_to_readable(el[0])}: {round(el[1], 3)}" for el in
+                                   sorted(policies, key=lambda x: x[1], reverse=True)][:2]
+
+
+                    action_s = self.game.convert_action_to_readable(self.first_action)
+
+                    if action_s in self.first_action_dict:
+                        if r == 1:
+                            wins = self.first_action_dict[action_s][1] + 1
+                        else:
+                            wins = self.first_action_dict[action_s][1]
+                        total = self.first_action_dict[action_s][0] + 1
+                        self.first_action_dict[action_s] = (total, wins, round(wins/total, 2), self.first_nn_value[1] * -1)
+                    else:
+                        if r == 1:
+                            wins = 1
+                        else:
+                            wins = 0
+                        self.first_action_dict[action_s] = (1, wins, round(wins/1, 2), self.first_nn_value[1] * -1)
+
+                    self.log(f"""R: {r}, A: {action_s}, temp: {self.first_temp}, NN: {self.first_nn_value[1] * -1}""", debug_file_path="./logs/init_state_examples.txt")
+                    self.log(f"\t{self.first_prob_strs}", debug_file_path="./logs/init_state_examples.txt")
+
+
+                    # self.log(f"""
+                    # POLICY: {', '.join(policy_strs)},
+                    # R: {r}
+                    # """, debug_file_path="./logs/init_state_examples.txt")
+
+
+                    self.explainTrainExamples(currentTrainExamples)
+                    iterationTrainExamples += currentTrainExamples
                     if self.display_time:
                         print(f"ONE GAME: {round(time.time() - start_time, 2 )}s")
                         print(self.times)
@@ -203,7 +289,6 @@ class Coach():
                 # save the iteration examples to the history
                 self.trainExamplesHistory.append(iterationTrainExamples)
 
-                self.explainTrainExamples(iterationTrainExamples)
 
             # If too many iterationTrainExamples stored, remove oldest entry in trainExampleshistory
             if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
@@ -227,6 +312,40 @@ class Coach():
 
             self.nnet.train(trainExamples)
             nmcts = MCTS(self.game, self.nnet, self.args, verbose=self.verbose, output = self.output, debug_file_path=self.debug_file_path)
+
+            self.game.reset_main()
+
+            pi, v = self.nnet.predict(self.game.getCanonicalForm(None, 1, "main"))
+            # self.log(self.game.getCanonicalForm(None, 1, "main"), debug_file_path="./logs/init_state_examples.txt")
+            # policy string
+            policies = []
+            for i, p in enumerate(pi):
+                if p != 0:
+                    policies.append((i, p))
+            policy_strs = [f"{self.game.convert_action_to_readable(el[0])}: {round(el[1], 3)}" for el in
+                           sorted(policies, key=lambda x: x[1], reverse=True)][:5]
+
+            state = np.concatenate(
+                [self.game.states["main"].board, self.game.states['main'].reserved[1], self.game.states["main"].reserved[2],
+                 list(self.game.states["main"].perma_gems[1].values()), list(self.game.states["main"].perma_gems[2].values()),
+                 [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 2, 0],
+                 [0, 0, -1],
+                 self.game.states["main"].nobles_board
+                 ], dtype=int)
+
+            _, v_taking_kk = self.nnet.predict(state)
+
+            self.log(f"""
+            Post-train Policy: {','.join(policy_strs)}
+            Value of taking kk: {v_taking_kk * -1}
+            """, debug_file_path="./logs/init_state_examples.txt")
+
+            # self.log(f"""
+            # Post-train Policy: {','.join(policy_strs)}
+            #     on state: {self.game.getCanonicalForm(None, 1, "main")}
+            # Value of taking kk: {v_taking_kk * -1}
+            #     on state: {state}
+            # """, debug_file_path="./logs/init_state_examples.txt")
 
             log.info('PITTING AGAINST PREVIOUS VERSION')
 
@@ -256,9 +375,11 @@ class Coach():
             log.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
                 log.info('REJECTING NEW MODEL')
+                accepted = False
                 self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
             else:
                 log.info('ACCEPTING NEW MODEL')
+                accepted = True
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
 
