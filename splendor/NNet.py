@@ -102,21 +102,23 @@ class NNetWrapper(NeuralNet):
 
         # preparing input
         board = torch.FloatTensor(board.astype(np.float64))
-
-        # Reshaping
-        # if args.cuda: board = board.contiguous().cuda()
-        # board = board.view(1, self.board_x, self.board_y)
-
+        if len(board.shape) == 1:
+            board = board.unsqueeze(0)
         self.nnet.eval()
         with torch.no_grad():
             pi, v = self.nnet(board)
-
-        # self.log(f"pi: {pi}")
-        # self.log(f"v: {v}")
-
+        
+        # Convert from log probabilities to probabilities
+        pi = torch.exp(pi).data.cpu().numpy()[0]  # Add [0] to get first element since we have batch size 1
+        v = v.data.cpu().numpy()[0][0]  # Add [0][0] to get scalar value
+        
+        # Ensure pi sums to 1
+        if np.sum(pi) > 0:
+            pi = pi / np.sum(pi)
+            
         # if self.verbose:
         #     print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
-        return torch.exp(pi).data.cpu().numpy(), v.data.cpu().numpy()[0]
+        return pi, v
 
     def loss_pi(self, targets, outputs):
         return -torch.sum(targets * outputs) / targets.size()[0]

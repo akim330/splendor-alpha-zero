@@ -40,7 +40,7 @@ class Arena():
             elif self.output == 'print':
                 print(s)
 
-    def playGame(self, verbose=False):
+    def playGame(self, n_game, verbose=False):
         """
         Executes one episode of a game.
 
@@ -67,7 +67,7 @@ class Arena():
             # print(f"Player: {curPlayer}")
             #action = players[curPlayer + 1](self.game.getCanonicalForm(board, curPlayer, m_or_b))
             action = players[arenaCurPlayer + 1](akCurPlayer, self.verbose)
-
+            self.log(f"ARENA GAME {n_game}: TURN {it} PLAYER {arenaCurPlayer} TAKES ACTION!: {action}")
 
             #valids = self.game.getValidMoves(self.game.getCanonicalForm(board, curPlayer, m_or_b), 1)
             valids = self.game.getValidMoves(None, akCurPlayer, m_or_b)
@@ -77,8 +77,8 @@ class Arena():
                 log.debug(f'valids = {valids}')
                 assert valids[action] > 0
             board, akCurPlayer = self.game.getNextState(board, akCurPlayer, action, m_or_b)
-            if akCurPlayer == 2:
-                arenaCurPlayer = -1
+            arenaCurPlayer = 1 if akCurPlayer == 1 else -1
+
         # if verbose:
         #     assert self.display
         #     print("Game over: Turn ", str(it), "Result ", str(self.game.getGameEnded(board, 1, m_or_b)))
@@ -113,7 +113,7 @@ class Arena():
                 self.verbose = False
                 self.game.verbose = False
 
-            gameResult = self.playGame(verbose=self.verbose)
+            gameResult = self.playGame(n_game = i, verbose=self.verbose)
             if gameResult == 1:
                 oneWon += 1
             elif gameResult == -1:
@@ -128,7 +128,7 @@ class Arena():
             self.log(f"###### ARENA GAME {i} for player 2 ########")
             self.log(f"###########################################")
 
-            gameResult = self.playGame(verbose=self.verbose)
+            gameResult = self.playGame(n_game = i, verbose=self.verbose)
             if gameResult == -1:
                 oneWon += 1
             elif gameResult == 1:

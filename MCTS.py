@@ -5,10 +5,6 @@ import time
 import numpy as np
 import pandas as pd
 
-from splendor.config import level_1_cards, level_2_cards, level_3_cards
-
-n_cards = len(level_1_cards) + len(level_2_cards) + len(level_3_cards)
-
 EPS = 1e-8
 
 log = logging.getLogger(__name__)
@@ -266,7 +262,7 @@ class MCTS():
 
         if np.sum(valids) > 1:
             # 213
-            valids[n_cards * 2 + 33] = 0
+            valids[self.game.n_actions - 1] = 0
         # print(f"DEBUG 6 for player{player} and {m_or_b}: {valids}")
 
         cur_best = -float('inf')
@@ -319,7 +315,7 @@ class MCTS():
         next_s, next_player = self.game.getNextState(None, player, a, m_or_b)
         next_s = self.game.getCanonicalForm(next_s, next_player, m_or_b)
 
-        if a == n_cards * 2 + 33:
+        if a == self.game.n_actions - 1:
             if did_nothing_last_recursion:
                 return -1
             else:

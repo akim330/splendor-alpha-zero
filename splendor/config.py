@@ -392,3 +392,82 @@ nobles_list = [
     Noble(id=9, pv=3,
           w=0, u=0, g=3, r=3, k=3),
 ]
+
+
+level_1_cards_simple = {
+    # LEVEL 1
+    # 0: Card(level=1, color="k", pv=0,
+    #         w=1, u=1, g=1, r=1, k=0),
+    # 1: Card(level=1, color="k", pv=0,
+    #         w=1, u=2, g=1, r=1, k=0),
+    # 2: Card(level=1, color="k", pv=0,
+    #         w=2, u=2, g=0, r=1, k=0),
+    # 3: Card(level=1, color="k", pv=0,
+    #         w=0, u=0, g=1, r=3, k=1),
+    0: Card(level=1, color="k", pv=1,
+            w=0, u=0, g=2, r=1, k=0),
+    1: Card(level=1, color="k", pv=0,
+            w=2, u=0, g=2, r=0, k=0),
+    2: Card(level=1, color="k", pv=0,
+            w=0, u=0, g=3, r=0, k=0),
+    3: Card(level=1, color="k", pv=0,
+            w=0, u=4, g=0, r=0, k=0),
+
+    # 8: Card(level=1, color="u", pv=0,
+    #         w=1, u=0, g=1, r=1, k=1),
+    # 9: Card(level=1, color="u", pv=0,
+    #         w=1, u=0, g=1, r=2, k=1),
+    # 10: Card(level=1, color="u", pv=0,
+    #         w=1, u=0, g=2, r=2, k=0),
+    # 11: Card(level=1, color="u", pv=0,
+    #         w=0, u=1, g=3, r=1, k=0),
+    # 12: Card(level=1, color="u", pv=0,
+    #         w=1, u=0, g=0, r=0, k=2),
+    # 13: Card(level=1, color="u", pv=0,
+    #         w=0, u=0, g=2, r=0, k=2),
+    # 14: Card(level=1, color="u", pv=0,
+    #         w=0, u=0, g=0, r=0, k=3),
+    # 15: Card(level=1, color="u", pv=1,
+    #         w=0, u=0, g=0, r=4, k=0),
+
+}
+
+level_2_cards_simple = {
+    # LEVEL 2
+
+    4: Card(level=2, color="k", pv=3,
+            w=0, u=0, g=0, r=0, k=6),
+    5: Card(level=2, color="u", pv=1,
+             w=0, u=2, g=3, r=0, k=3),
+    6: Card(level=2, color="u", pv=2,
+             w=2, u=0, g=0, r=1, k=4),
+ 
+    7: Card(level=2, color="r", pv=2,
+             w=3, u=0, g=0, r=0, k=5),
+    8: Card(level=2, color="r", pv=2,
+             w=0, u=0, g=0, r=0, k=5),
+}
+
+level_3_cards_simple = {
+    # LEVEL 3
+    9: Card(level=3, color="u", pv=3,
+             w=3, u=0, g=3, r=3, k=5),
+    10: Card(level=3, color="w", pv=4,
+             w=0, u=0, g=0, r=0, k=7),
+    11: Card(level=3, color="w", pv=4,
+             w=3, u=0, g=0, r=3, k=6),
+    12: Card(level=3, color="w", pv=5,
+             w=3, u=0, g=0, r=0, k=7),
+}
+
+nobles_list_simple = [
+  
+    Noble(id=0, pv=3,
+          w=4, u=0, g=0, r=0, k=4),
+   
+    Noble(id=1, pv=3,
+          w=0, u=0, g=0, r=4, k=4),
+   
+    Noble(id=2, pv=3,
+          w=0, u=0, g=3, r=3, k=3),
+]

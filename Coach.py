@@ -67,8 +67,13 @@ class Coach():
 
         elif self.output == 'print':
             print(s)
+    
+    def clear_logs(self):
+        if self.output == 'file':
+            with open(self.debug_file_path, 'w') as f:
+                f.write('')
 
-    def executeEpisode(self):
+    def executeEpisode(self, round_number, game_number, nn_version):
         """
         This function executes one episode of self-play, starting with player 1.
         As the game is played, each turn is added as a training example to
@@ -124,7 +129,7 @@ class Coach():
                     strs.append(f"({self.game.convert_action_to_readable(i)}, {round(p, 3)})")
 
             if self.verbose:
-                self.log(f"\t***** MCTS: DONE for one action! Based on final probs, take action: {action} *****")
+                self.log(f"\t***** MCTS (RD {round_number} | GM {game_number} | NN V{nn_version} | TURN {episodeStep}): TAKE ACTION! Based on final probs, take action: {action} *****")
                 self.log(f"\tpi: {', '.join(strs)}")
 
 
@@ -153,7 +158,7 @@ class Coach():
 
                 if self.game.states[m_or_b].scores[self.curPlayer] > self.game.states[m_or_b].scores[3 - self.curPlayer]:
                     r = 1
-                elif self.game.states[m_or_b].scores[3 - self.curPlayer] - self.game.states[m_or_b].scores[self.curPlayer]:
+                elif self.game.states[m_or_b].scores[3 - self.curPlayer] > self.game.states[m_or_b].scores[self.curPlayer]:
                     r = -1
                 else:
                     return [(x[0], x[2], -1) for x in trainExamples]
@@ -179,18 +184,23 @@ class Coach():
         only if it wins >= updateThreshold fraction of games.
         """
         accepted = True
+        n_accepted = 0
 
-        for i in range(1, self.args.numIters + 1):
+        for num_iter in range(1, self.args.numIters + 1):
+            if num_iter % 5 == 0:
+                self.clear_logs()
+
             # bookkeeping
-            log.info(f'Starting Iter #{i} ...')
+            log.info(f'Starting Iter #{num_iter} ...')
             self.log(f"##################################")
-            self.log(f"##### COACH GLOBAL ROUND {i} #####")
+            self.log(f"##### COACH GLOBAL ROUND {num_iter} #####")
             self.log(f"##################################")
 
             self.game.reset_main()
 
 
             if accepted:
+                n_accepted += 1
                 pi, v = self.nnet.predict(self.game.getCanonicalForm(None, 1, "main"))
                 # policy string
                 policies = []
@@ -201,7 +211,7 @@ class Coach():
                                sorted(policies, key=lambda x: x[1], reverse=True)][:5]
 
                 self.log(f"""
-                ########### NEW NN!!!!!! #############
+                ########### NEW NN VERSION {n_accepted} !!!!!! #############
                 
                 Policy: {','.join(policy_strs)}
                     on state: {self.game.getCanonicalForm(None, 1, "main")}
@@ -215,38 +225,35 @@ class Coach():
             """, debug_file_path="./logs/init_state_examples.txt")
 
             # examples of the iteration
-            if not self.skipFirstSelfPlay or i > 1:
+            if not self.skipFirstSelfPlay or num_iter > 1:
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
-                for j in tqdm(range(self.args.numEps), desc="Self Play"):
+                for game_num in tqdm(range(self.args.numEps), desc="Self Play"):
                     if self.display_all:
                         self.verbose = True
-                    elif j != self.args.numEps - 1:
+                    elif game_num != self.args.numEps - 1:
                         self.verbose = False
-
                     else:
                         self.verbose = True
                     self.game.verbose = self.verbose
 
-
-
-                    self.log(f"##### COACH SELF-PLAY GAME {j} #####")
-
+                    if self.verbose:
+                        self.log(f"##### COACH SELF-PLAY ROUND {num_iter} | NN VERSION {n_accepted} | GAME {game_num} #####")
 
                     self.mcts = MCTS(self.game, self.nnet, self.args, verbose=self.verbose, output = self.output, debug_file_path=self.debug_file_path, display_time=self.display_time)  # reset search tree
 
                     # Run an episode of self-play
                     start_time = time.time()
-                    currentTrainExamples = self.executeEpisode()
+                    currentTrainExamples = self.executeEpisode(round_number=num_iter, game_number=game_num, nn_version=n_accepted)
 
                     pi = currentTrainExamples[0][1]
                     r = currentTrainExamples[0][2]
 
                     # policy string
                     policies = []
-                    for i, p in enumerate(pi):
+                    for num_iter, p in enumerate(pi):
                         if p != 0:
-                            policies.append((i, p))
+                            policies.append((num_iter, p))
                     policy_strs = [f"{self.game.convert_action_to_readable(el[0])}: {round(el[1], 3)}" for el in
                                    sorted(policies, key=lambda x: x[1], reverse=True)][:2]
 
@@ -276,8 +283,8 @@ class Coach():
                     # R: {r}
                     # """, debug_file_path="./logs/init_state_examples.txt")
 
-
-                    self.explainTrainExamples(currentTrainExamples)
+                    if self.verbose:    
+                        self.explainTrainExamples(currentTrainExamples)
                     iterationTrainExamples += currentTrainExamples
                     if self.display_time:
                         print(f"ONE GAME: {round(time.time() - start_time, 2 )}s")
@@ -297,7 +304,7 @@ class Coach():
                 self.trainExamplesHistory.pop(0)
             # backup history to a file
             # NB! the examples were collected using the model from the previous iteration, so (i-1)  
-            self.saveTrainExamples(i - 1)
+            self.saveTrainExamples(num_iter - 1)
 
             # shuffle examples before training
             trainExamples = []
@@ -380,7 +387,7 @@ class Coach():
             else:
                 log.info('ACCEPTING NEW MODEL')
                 accepted = True
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(num_iter))
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
 
                 self.log(f"""######### NN TEST ##############""")
