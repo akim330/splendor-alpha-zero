@@ -229,6 +229,8 @@ level_1_cards_all = {
              w=4, u=0, g=0, r=0, k=0),
 }
 
+target_score = 15
+
 level_1_cards = {}
 for i, card in enumerate(list(level_1_cards_all.values())):
     level_1_cards[i] = card
@@ -393,8 +395,50 @@ nobles_list = [
           w=0, u=0, g=3, r=3, k=3),
 ]
 
+target_score_simpler = 2
 
-level_1_cards_simple = {
+level_1_cards_simpler = {
+    # Cards with 0 PV but useful for building resources
+    0: Card(level=1, color="w", pv=0, w=0, u=0, g=1, r=2, k=1),
+    1: Card(level=1, color="u", pv=0, w=1, u=0, g=2, r=1, k=0),
+    2: Card(level=1, color="g", pv=0, w=2, u=1, g=0, r=0, k=1),
+    3: Card(level=1, color="r", pv=0, w=0, u=2, g=1, r=0, k=1),
+    4: Card(level=1, color="k", pv=0, w=1, u=1, g=1, r=1, k=0),
+    
+    # Cards with 1 PV that require more resources
+    5: Card(level=1, color="w", pv=1, w=0, u=0, g=3, r=0, k=1),
+    6: Card(level=1, color="u", pv=1, w=0, u=0, g=0, r=3, k=1),
+    7: Card(level=1, color="g", pv=1, w=2, u=0, g=0, r=0, k=2),
+    8: Card(level=1, color="r", pv=1, w=3, u=1, g=0, r=0, k=0),
+    9: Card(level=1, color="k", pv=1, w=0, u=3, g=1, r=0, k=0),
+}
+
+level_2_cards_simpler = {
+    # More valuable cards that require more investment
+    10: Card(level=2, color="w", pv=2, w=0, u=0, g=3, r=2, k=2),
+    11: Card(level=2, color="u", pv=2, w=0, u=2, g=3, r=0, k=3),
+    12: Card(level=2, color="g", pv=2, w=4, u=2, g=0, r=0, k=1),
+    13: Card(level=2, color="r", pv=2, w=0, u=0, g=5, r=0, k=0),
+    14: Card(level=2, color="k", pv=2, w=0, u=5, g=0, r=0, k=0),
+}
+
+level_3_cards_simpler = {
+    # High-value cards that require significant investment
+    15: Card(level=3, color="k", pv=3, w=3, u=0, g=3, r=3, k=2),
+    16: Card(level=3, color="w", pv=3, w=0, u=3, g=3, r=5, k=0),
+    17: Card(level=3, color="r", pv=4, w=0, u=0, g=7, r=0, k=0),
+    18: Card(level=3, color="w", pv=5, w=3, u=0, g=0, r=0, k=7),
+}
+
+nobles_list_simpler = [
+    Noble(id=0, pv=3, w=3, u=3, g=0, r=0, k=0),
+    Noble(id=1, pv=3, w=0, u=0, g=3, r=3, k=0),
+    Noble(id=2, pv=3, w=0, u=4, g=0, r=0, k=4),
+]
+
+target_score_simplest = 1
+
+level_1_cards_simplest = {
     # LEVEL 1
     # 0: Card(level=1, color="k", pv=0,
     #         w=1, u=1, g=1, r=1, k=0),
@@ -410,7 +454,7 @@ level_1_cards_simple = {
             w=2, u=0, g=2, r=0, k=0),
     2: Card(level=1, color="k", pv=0,
             w=0, u=0, g=3, r=0, k=0),
-    3: Card(level=1, color="k", pv=0,
+    3: Card(level=1, color="k", pv=1,
             w=0, u=4, g=0, r=0, k=0),
 
     # 8: Card(level=1, color="u", pv=0,
@@ -432,7 +476,7 @@ level_1_cards_simple = {
 
 }
 
-level_2_cards_simple = {
+level_2_cards_simplest = {
     # LEVEL 2
 
     4: Card(level=2, color="k", pv=3,
@@ -448,7 +492,7 @@ level_2_cards_simple = {
              w=0, u=0, g=0, r=0, k=5),
 }
 
-level_3_cards_simple = {
+level_3_cards_simplest = {
     # LEVEL 3
     9: Card(level=3, color="u", pv=3,
              w=3, u=0, g=3, r=3, k=5),
@@ -460,7 +504,7 @@ level_3_cards_simple = {
              w=3, u=0, g=0, r=0, k=7),
 }
 
-nobles_list_simple = [
+nobles_list_simplest = [
   
     Noble(id=0, pv=3,
           w=4, u=0, g=0, r=0, k=4),

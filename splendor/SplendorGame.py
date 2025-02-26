@@ -15,11 +15,14 @@ import re
 
 import time
 
-from splendor.config import level_1_cards, level_2_cards, level_3_cards, nobles_list, level_1_cards_simple, level_2_cards_simple, level_3_cards_simple, nobles_list_simple
+from splendor.config import (
+    level_1_cards, level_2_cards, level_3_cards, nobles_list, target_score,
+    level_1_cards_simpler, level_2_cards_simpler, level_3_cards_simpler, nobles_list_simpler, target_score_simpler,
+    level_1_cards_simplest, level_2_cards_simplest, level_3_cards_simplest, nobles_list_simplest, target_score_simplest
+)
 
 import os
 
-target_score = 1
 
 take_coins_actions = ['wug', 'wur', 'wuk', 'wgr', 'wgk', 'wrk', 'ugr', 'ugk', 'urk', 'grk', 'wu', 'wg', 'wr', 'wk', 'ug',
                       'ur', 'uk', 'gr', 'gk', 'rk', 'w', 'u', 'g', 'r', 'k', 'ww', 'uu', 'gg', 'rr', 'kk', '']
@@ -57,15 +60,25 @@ class SplendorGame():
             self.n_level_2_cards = len(level_2_cards)
             self.n_level_3_cards = len(level_3_cards)
             self.n_cards = len(level_1_cards) + len(level_2_cards) + len(level_3_cards)
+            self.target_score = target_score
 
-        else:
-            self.cards = level_1_cards_simple | level_2_cards_simple | level_3_cards_simple
-            self.nobles = nobles_list_simple
-            self.n_level_1_cards = len(level_1_cards_simple)
-            self.n_level_2_cards = len(level_2_cards_simple)
-            self.n_level_3_cards = len(level_3_cards_simple)
-            self.n_cards = len(level_1_cards_simple) + len(level_2_cards_simple) + len(level_3_cards_simple)
+        elif game_type == "simpler":
+            self.cards = level_1_cards_simpler | level_2_cards_simpler | level_3_cards_simpler
+            self.nobles = nobles_list_simpler
+            self.n_level_1_cards = len(level_1_cards_simpler)
+            self.n_level_2_cards = len(level_2_cards_simpler)
+            self.n_level_3_cards = len(level_3_cards_simpler)
+            self.n_cards = len(level_1_cards_simpler) + len(level_2_cards_simpler) + len(level_3_cards_simpler)
+            self.target_score = target_score_simpler
 
+        elif game_type == "simplest":
+            self.cards = level_1_cards_simplest | level_2_cards_simplest | level_3_cards_simplest
+            self.nobles = nobles_list_simplest
+            self.n_level_1_cards = len(level_1_cards_simplest)
+            self.n_level_2_cards = len(level_2_cards_simplest)
+            self.n_level_3_cards = len(level_3_cards_simplest)
+            self.n_cards = len(level_1_cards_simplest) + len(level_2_cards_simplest) + len(level_3_cards_simplest)
+            self.target_score = target_score_simplest
         self.states = {}
         self.output = output
         self.debug_file_path = debug_file_path
@@ -812,22 +825,24 @@ class SplendorGame():
         if player == 2:
             return 0
         if player == 1:  # Can only end if just ended player 2's turn (assuming player 1 went first)
-            winningConditionMet : bool = self.states[m_or_b].scores[1] >= target_score or self.states[m_or_b].scores[2] >= target_score
+            winningConditionMet : bool = self.states[m_or_b].scores[1] >= self.target_score or self.states[m_or_b].scores[2] >= self.target_score
             opponent : int = self.switch_player(player)
             if winningConditionMet:
+                log_string = f"Game ended. Player 1 {self.states[m_or_b].scores[1]}, player 2 {self.states[m_or_b].scores[2]}, target {self.target_score}."
+
                 if self.states[m_or_b].scores[1] == self.states[m_or_b].scores[2]:
                     if self.dict_values_sum(self.states[m_or_b].perma_gems[player]) >= self.dict_values_sum(
                             self.states[m_or_b].perma_gems[opponent]):
-                        self.log(f"Game ended on tie score and player {player} has more permanent gems! -> Player {opponent} wins")
+                        self.log(log_string + f"Tied but player {player} has more permanent gems! -> Player {opponent} wins")
                         return -1
                     else:
-                        self.log(f"Game ended on tie score and player {opponent} has less permanent gems! -> Player {player} wins")
+                        self.log(log_string + f"Tied but player {opponent} has more permanent gems! -> Player {player} wins")
                         return 1
                 elif self.states[m_or_b].scores[player] > self.states[m_or_b].scores[opponent]:
-                    self.log(f"Game ended on player {player} having more points! -> Player {opponent} wins")
+                    self.log(log_string + f"Player {player} wins")
                     return 1
                 elif self.states[m_or_b].scores[player] < self.states[m_or_b].scores[opponent]:
-                    self.log(f"Game ended on player {player} having less points! -> Player {opponent} wins")
+                    self.log(log_string + f"Player {opponent} wins")
                     return -1
                 else:
                     raise Exception(f"""
@@ -837,7 +852,7 @@ class SplendorGame():
                         Perma-gems: {self.states[m_or_b].perma_gems}
                     """)
             else:
-                self.log(f"Game not over yet since scores are {self.states[m_or_b].scores} and target score is {target_score}")
+                self.log(f"Game not over yet since scores are {self.states[m_or_b].scores} and target score is {self.target_score}")
                 return 0
 
     def getCanonicalForm(self, board, player, m_or_b):
