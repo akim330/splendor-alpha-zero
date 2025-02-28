@@ -123,11 +123,13 @@ class SplendorGame():
             'get_canonical_form': 0
         }
 
-    def log(self, s):
+    def log(self, s, print_to_terminal = False):
         if self.verbose:
             if self.output == 'file':
                 with open(self.debug_file_path, 'a') as f:
                     f.write(f"{s}\n")
+            if print_to_terminal:
+                print(s)
 
             elif self.output == 'print':
                 print(s)
@@ -399,13 +401,15 @@ class SplendorGame():
             new_id = self.states[m_or_b].id_decks[level].popleft()
             self.states[m_or_b].board[new_id] = 1
 
-    def getNextState(self, board, player, action, m_or_b):
+    def getNextState(self, board, player, action, m_or_b, print_to_terminal = False):
         start_time = time.time()
 
         # if player takes action on board, return next (board,player)
         # action must be a valid move
 
         # print(f"DEBUG: getting next state for {m_or_b}")
+
+        action_str = "" # For logging
 
         if action < 0:
             raise Exception("Action can't be negative")
@@ -487,9 +491,7 @@ class SplendorGame():
 
                 self.states[m_or_b].gained_nobles[player].append(self.nobles[best_noble_i])
 
-                noble_s = f"""
-                    Acquired noble: {self.nobles[best_noble_i]}
-                """
+                noble_s = f"""Acquired noble: {self.nobles[best_noble_i]}"""
 
                 # Delete noble from the list
                 self.states[m_or_b].nobles_board[best_noble_i] = 0
@@ -497,9 +499,7 @@ class SplendorGame():
             else:
                 noble_s = ""
 
-            self.log(f"""
-                Player {player} bought card {id_to_buy}: {self.cards[id_to_buy]}
-                """)
+            action_str = f"""Player {player} bought card {id_to_buy}: {self.cards[id_to_buy]}"""
 
 
         elif action < self.n_cards * 2:
@@ -535,18 +535,8 @@ class SplendorGame():
                         np.where(np.array(list(self.states[m_or_b].coins[player].values()))[:5] > 0)[0])]
                     self.states[m_or_b].coins[player][random_color] -= 1
 
-            self.log(f"""
-                Player {player} reserved card {id_to_reserve}: {self.cards[id_to_reserve]}
-                """)
-                # print(f"""
-                # Player {player} reserved card {id_to_reserve}: {self.cards[id_to_reserve]}
-                #
-                #     COINS:
-                #
-                #         Before: {before_coins}
-                #
-                #         After: {self.states[m_or_b].coins[player]}
-                # """)
+            action_str = f"""Player {player} reserved card {id_to_reserve}: {self.cards[id_to_reserve]}"""
+
 
         elif self.n_cards * 2 <= action <= self.n_cards * 2 + 2:
             # 180 --> Reserve level 1 card
@@ -562,21 +552,8 @@ class SplendorGame():
             if self.states[m_or_b].coins[player]['y'] + self.states[m_or_b].coins[self.switch_player(player)]['y'] < 5:
                 self.states[m_or_b].coins[player]['y'] += 1
 
-            self.log(f"""
-                Player {player} reserved card from level {level}: {self.cards[new_id]}
-                """)
+            action_str = f"""Player {player} reserved card from level {level}: {self.cards[new_id]}"""
 
-                # print(f"""
-                # Player {player} reserved card from level {level}: {self.cards[new_id]}
-                #
-                #     Reserved: {self.states[m_or_b].reserved}
-                #
-                #     COINS:
-                #
-                #         Before: {before_coins}
-                #
-                #         After: {self.states[m_or_b].coins[player]}
-                # """)
 
         elif self.n_cards * 2 + 3 <= action <= self.n_cards * 2 + 32:
             # Take coins
@@ -588,19 +565,12 @@ class SplendorGame():
                     color] < 4, f"Can't take color {color}. Player 1 has {self.coins[1][color]}. Player 2 has {self.coins[2][color]}"
                 self.states[m_or_b].coins[player][color] += 1
 
-            self.log(f"""
-                Player {player} took coins: {coins_string}
-                """)
-                # print(f"""
-                # Player {player} took coins: {coins_string}
-                #
-                #     Before: {before_coins}
-                #     After: {self.states[m_or_b].coins[player]}
-                # """)
+            action_str = f"""Player {player} took coins: {coins_string}"""
+
         elif action == self.n_cards * 2 + 33:
             # Do nothing
             # print("##### DID NOTHING 1 #######")
-
+            action_str = f"""Player {player} did nothing"""
             pass
         else:
             raise Exception(f"Unrecognized action: {action}")
@@ -616,6 +586,7 @@ class SplendorGame():
 
         self.times['next'] += time.time() - start_time
 
+        self.log("\t" + action_str, print_to_terminal = print_to_terminal and self.verbose)
 
         return None, self.switch_player(player)
 
@@ -810,16 +781,16 @@ class SplendorGame():
     def dict_values_sum(self, dict):
         return np.sum(np.array(list(dict.values())))
 
-    def getGameEnded(self, board, player, m_or_b):
+    def getGameEnded(self, board, player, m_or_b, print_to_terminal = False):
         # return 0 if not ended, 1 if player 1 won, -1 if player 1 lost
 
         # print(f"#### ARE THERE CONSECUTIVE DO NOTHINGS? {self.states[m_or_b].consecutive_do_nothings}")
         if self.states[m_or_b].consecutive_do_nothings >= 2:
-            self.log("Game ended on consecutive do nothings!")
+            self.log("Game ended on consecutive do nothings!", print_to_terminal = print_to_terminal and self.verbose)
             return -2
 
         if np.sum(self.current_valid_moves) == 0:
-            self.log(f"Game ended on no valid moves!")
+            self.log(f"Game ended on no valid moves!", print_to_terminal = print_to_terminal and self.verbose)
             return -1
 
         if player == 2:
@@ -828,21 +799,21 @@ class SplendorGame():
             winningConditionMet : bool = self.states[m_or_b].scores[1] >= self.target_score or self.states[m_or_b].scores[2] >= self.target_score
             opponent : int = self.switch_player(player)
             if winningConditionMet:
-                log_string = f"Game ended. Player 1 {self.states[m_or_b].scores[1]}, player 2 {self.states[m_or_b].scores[2]}, target {self.target_score}."
+                log_string = f"Game ended. Player 1: {self.states[m_or_b].scores[1]} pts, player 2: {self.states[m_or_b].scores[2]} pts, target: {self.target_score} pts => "
 
                 if self.states[m_or_b].scores[1] == self.states[m_or_b].scores[2]:
                     if self.dict_values_sum(self.states[m_or_b].perma_gems[player]) >= self.dict_values_sum(
                             self.states[m_or_b].perma_gems[opponent]):
-                        self.log(log_string + f"Tied but player {player} has more permanent gems! -> Player {opponent} wins")
+                        self.log(log_string + f"Tied but player {player} has more permanent gems! -> Player {opponent} wins", print_to_terminal = print_to_terminal and self.verbose)
                         return -1
                     else:
-                        self.log(log_string + f"Tied but player {opponent} has more permanent gems! -> Player {player} wins")
+                        self.log(log_string + f"Tied but player {opponent} has more permanent gems! -> Player {player} wins", print_to_terminal = print_to_terminal and self.verbose)
                         return 1
                 elif self.states[m_or_b].scores[player] > self.states[m_or_b].scores[opponent]:
-                    self.log(log_string + f"Player {player} wins")
+                    self.log(log_string + f"Player {player} wins", print_to_terminal = print_to_terminal and self.verbose)
                     return 1
                 elif self.states[m_or_b].scores[player] < self.states[m_or_b].scores[opponent]:
-                    self.log(log_string + f"Player {opponent} wins")
+                    self.log(log_string + f"Player {opponent} wins", print_to_terminal = print_to_terminal and self.verbose)
                     return -1
                 else:
                     raise Exception(f"""

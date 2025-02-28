@@ -312,7 +312,7 @@ class MCTS():
         self.log(f"{tabs}Taking best action by UCT: {best_act}, leading to new state:")
 
         a = best_act
-        next_s, next_player = self.game.getNextState(None, player, a, m_or_b)
+        next_s, next_player = self.game.getNextState(None, player, a, m_or_b, print_to_terminal = False)
         next_s = self.game.getCanonicalForm(next_s, next_player, m_or_b)
 
         if a == self.game.n_actions - 1:

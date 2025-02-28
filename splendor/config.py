@@ -454,7 +454,7 @@ level_1_cards_simplest = {
             w=2, u=0, g=2, r=0, k=0),
     2: Card(level=1, color="k", pv=0,
             w=0, u=0, g=3, r=0, k=0),
-    3: Card(level=1, color="k", pv=1,
+    3: Card(level=1, color="k", pv=0,
             w=0, u=4, g=0, r=0, k=0),
 
     # 8: Card(level=1, color="u", pv=0,
