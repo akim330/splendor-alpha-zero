@@ -58,12 +58,14 @@ class Coach():
             'get_game_ended': 0
         }
 
-    def log(self, s, debug_file_path = None):
+    def log(self, s, debug_file_path = None, print_to_terminal = False):
         if not debug_file_path:
             debug_file_path = self.debug_file_path
         if self.output == 'file':
             with open(debug_file_path, 'a') as f:
                 f.write(f"{s}\n")
+            if print_to_terminal:
+                print(s)
 
         elif self.output == 'print':
             print(s)
@@ -73,7 +75,7 @@ class Coach():
             with open(self.debug_file_path, 'w') as f:
                 f.write('')
 
-    def executeEpisode(self, round_number, game_number, nn_version):
+    def executeEpisode(self, round_number, game_number, nn_version, new_nn_version = False):
         """
         This function executes one episode of self-play, starting with player 1.
         As the game is played, each turn is added as a training example to
@@ -129,12 +131,12 @@ class Coach():
                     strs.append(f"({self.game.convert_action_to_readable(i)}, {round(p, 3)})")
 
             if self.verbose:
-                self.log(f"\t***** MCTS (RD {round_number} | GM {game_number} | NN V{nn_version} | TURN {episodeStep}): TAKE ACTION! Based on final probs, take action: {action} *****")
+                self.log(f"\t***** MCTS (RD {round_number} | GM {game_number} | NN V{nn_version} | TURN {episodeStep}): TAKE ACTION! Based on final probs, take action: {action} *****", print_to_terminal = new_nn_version)
                 self.log(f"\tpi: {', '.join(strs)}")
 
 
 
-            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action, m_or_b)
+            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action, m_or_b, print_to_terminal = new_nn_version)
             time3 = time.time()
 
             if episodeStep == 1:
@@ -144,7 +146,7 @@ class Coach():
                 self.first_nn_value = self.nnet.predict(self.game.getCanonicalForm(None, self.curPlayer, m_or_b))
                 # self.log(f"NN (next line) on state: {self.game.getCanonicalForm(None, self.curPlayer, m_or_b)}", debug_file_path="./logs/init_state_examples.txt")
 
-            r = self.game.getGameEnded(board, self.curPlayer, m_or_b)
+            r = self.game.getGameEnded(board, self.curPlayer, m_or_b, print_to_terminal = new_nn_version)
 
             time4 = time.time()
 
@@ -200,6 +202,7 @@ class Coach():
 
 
             if accepted:
+                new_nn_version = True
                 n_accepted += 1
                 pi, v = self.nnet.predict(self.game.getCanonicalForm(None, 1, "main"))
                 # policy string
@@ -216,6 +219,8 @@ class Coach():
                 Policy: {','.join(policy_strs)}
                     on state: {self.game.getCanonicalForm(None, 1, "main")}
                 """, debug_file_path="./logs/init_state_examples.txt")
+            else:
+                new_nn_version = False
 
             sorted_data = dict(sorted(self.first_action_dict.items(), key=lambda item: item[1][2], reverse=True))
 
@@ -244,7 +249,7 @@ class Coach():
 
                     # Run an episode of self-play
                     start_time = time.time()
-                    currentTrainExamples = self.executeEpisode(round_number=num_iter, game_number=game_num, nn_version=n_accepted)
+                    currentTrainExamples = self.executeEpisode(round_number=num_iter, game_number=game_num, nn_version=n_accepted, new_nn_version=new_nn_version)
 
                     pi = currentTrainExamples[0][1]
                     r = currentTrainExamples[0][2]
