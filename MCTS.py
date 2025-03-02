@@ -52,17 +52,19 @@ class MCTS():
 
     def reset_times(self):
         self.times = {
-            'misc1': 0,
-            'misc2': 0,
-            'get_next_state': 0,
-            'get_game_ended': 0,
-            'nn': 0,
-            'valid': 0
+            'misc1': 0.0,
+            'misc2': 0.0,
+            'get_next_state': 0.0,
+            'get_game_ended': 0.0,
+            'nn': 0.0,
+            'valid': 0.0
         }
 
     def log(self, s):
         if self.verbose:
             if self.output == 'file':
+                if self.debug_file_path is None:
+                    raise ValueError("debug_file_path is not set")
                 with open(self.debug_file_path, 'a') as f:
                     f.write(f"{s}\n")
 

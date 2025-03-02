@@ -2,10 +2,12 @@ from __future__ import print_function
 
 import copy
 import sys
+from typing import Dict, List
 
 sys.path.append('..')
 # from Game import Game
 import numpy as np
+from numpy.typing import NDArray
 
 import random
 # import queue
@@ -15,11 +17,7 @@ import re
 
 import time
 
-from splendor.config import (
-    level_1_cards, level_2_cards, level_3_cards, nobles_list, target_score,
-    level_1_cards_simpler, level_2_cards_simpler, level_3_cards_simpler, nobles_list_simpler, target_score_simpler,
-    level_1_cards_simplest, level_2_cards_simplest, level_3_cards_simplest, nobles_list_simplest, target_score_simplest
-)
+from splendor.config import SplendorConfig, SplendorGameVariant
 
 import os
 
@@ -32,17 +30,17 @@ cards_per_row_count = 4
 randomize_branch = False
 
 class SplendorGameState():
-    def __init__(self, id_decks, board, reserved, nobles_board, coins, perma_gems, scores, gained_nobles,
-                 consecutive_do_nothings):
-        self.id_decks = id_decks
-        self.board = board
-        self.reserved = reserved
-        self.nobles_board = nobles_board
-        self.coins = coins
-        self.perma_gems = perma_gems
-        self.scores = scores
-        self.gained_nobles = gained_nobles
-        self.consecutive_do_nothings = consecutive_do_nothings
+    def __init__(self, id_decks : Dict[int, deque[int]], board : NDArray[np.int_], reserved : Dict[int, NDArray[np.int_]], nobles_board : NDArray[np.int_], coins : Dict[int, Dict[str, int]], perma_gems : Dict[int, Dict[str, int]], scores : Dict[int, int], gained_nobles : Dict[int, List[int]],
+                 consecutive_do_nothings : int):
+        self.id_decks : Dict[int, deque[int]] = id_decks
+        self.board : NDArray[np.int_] = board
+        self.reserved : Dict[int, NDArray[np.int_]] = reserved
+        self.nobles_board : NDArray[np.int_] = nobles_board
+        self.coins : Dict[int, Dict[str, int]] = coins
+        self.perma_gems : Dict[int, Dict[str, int]] = perma_gems
+        self.scores : Dict[int, int] = scores
+        self.gained_nobles : Dict[int, List[int]] = gained_nobles
+        self.consecutive_do_nothings : int = consecutive_do_nothings
 
 
 class SplendorGame():
@@ -50,58 +48,41 @@ class SplendorGame():
     # def getSquarePiece(piece):
     #     return SplendorGame.square_content[piece]
 
-    def __init__(self, game_type = "standard", verbose=False, output = "print", debug_file_path = None, display_time = False, randomize = True):
-        self.verbose = verbose
-        
-        if game_type == "standard":
-            self.cards = level_1_cards | level_2_cards | level_3_cards
-            self.nobles = nobles_list
-            self.n_level_1_cards = len(level_1_cards)
-            self.n_level_2_cards = len(level_2_cards)
-            self.n_level_3_cards = len(level_3_cards)
-            self.n_cards = len(level_1_cards) + len(level_2_cards) + len(level_3_cards)
-            self.target_score = target_score
+    def __init__(
+        self, 
+        game_variant : SplendorGameVariant = SplendorGameVariant.VANILLA, 
+        verbose : bool = False, 
+        output : str = "print", 
+        debug_file_path : str | None = None, 
+        display_time : bool = False, 
+        randomize : bool = True
+    ):
+        self.verbose : bool = verbose
+        self.config : SplendorConfig = SplendorConfig.get_config(game_variant)
 
-        elif game_type == "simpler":
-            self.cards = level_1_cards_simpler | level_2_cards_simpler | level_3_cards_simpler
-            self.nobles = nobles_list_simpler
-            self.n_level_1_cards = len(level_1_cards_simpler)
-            self.n_level_2_cards = len(level_2_cards_simpler)
-            self.n_level_3_cards = len(level_3_cards_simpler)
-            self.n_cards = len(level_1_cards_simpler) + len(level_2_cards_simpler) + len(level_3_cards_simpler)
-            self.target_score = target_score_simpler
-
-        elif game_type == "simplest":
-            self.cards = level_1_cards_simplest | level_2_cards_simplest | level_3_cards_simplest
-            self.nobles = nobles_list_simplest
-            self.n_level_1_cards = len(level_1_cards_simplest)
-            self.n_level_2_cards = len(level_2_cards_simplest)
-            self.n_level_3_cards = len(level_3_cards_simplest)
-            self.n_cards = len(level_1_cards_simplest) + len(level_2_cards_simplest) + len(level_3_cards_simplest)
-            self.target_score = target_score_simplest
         self.states = {}
-        self.output = output
-        self.debug_file_path = debug_file_path
+        self.output : str = output
+        self.debug_file_path : str | None = debug_file_path
 
-        self.randomize = randomize
+        self.randomize : bool = randomize
 
-        self.current_valid_moves = None
+        self.current_valid_moves = []
 
-        self.display_time = display_time
+        self.display_time : bool = display_time
 
-        self.n_actions = self.n_cards * 2 + 33 + 1
+        self.n_actions : int = self.config.n_cards * 2 + 33 + 1
 
-        self.take_coins_action_dict = {}
+        self.take_coins_action_dict : Dict[int, str] = {}
         for i in range(31):
-            self.take_coins_action_dict[self.n_cards * 2 + i + 3] = take_coins_actions[i]
+            self.take_coins_action_dict[self.config.n_cards * 2 + i + 3] = take_coins_actions[i]
 
 
-        self.color_str_to_action_dict = {}
+        self.color_str_to_action_dict : Dict[str, int] = {}
         for action in self.take_coins_action_dict:
             self.color_str_to_action_dict[self.take_coins_action_dict[action]] = action
 
 
-        self.times = {}
+        self.times : Dict[str, float] = {}
         self.reset_times()
 
         self.reset_main()
@@ -123,12 +104,14 @@ class SplendorGame():
             'get_canonical_form': 0
         }
 
-    def log(self, s, print_to_terminal = False):
+    def log(self, s : str, print_to_terminal : bool = False):
         if self.verbose:
             if self.output == 'file':
+                if self.debug_file_path is None:
+                    raise ValueError("debug_file_path is None but output is 'file'")
                 with open(self.debug_file_path, 'a') as f:
                     f.write(f"{s}\n")
-            if print_to_terminal:
+            if print_to_terminal:   
                 print(s)
 
             elif self.output == 'print':
@@ -139,9 +122,9 @@ class SplendorGame():
 
         start_time = time.time()
 
-        id_list1 = list(range(self.n_level_1_cards))
-        id_list2 = list(range(self.n_level_1_cards, self.n_level_1_cards + self.n_level_2_cards))
-        id_list3 = list(range(self.n_level_1_cards + self.n_level_2_cards, self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards))
+        id_list1 = list(range(self.config.n_level_1_cards))
+        id_list2 = list(range(self.config.n_level_1_cards, self.config.n_level_1_cards + self.config.n_level_2_cards))
+        id_list3 = list(range(self.config.n_level_1_cards + self.config.n_level_2_cards, self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards))
 
         if self.randomize:
             random.shuffle(id_list1)
@@ -167,10 +150,10 @@ class SplendorGame():
             3: deck3
         }
 
-        board = np.zeros(self.n_cards, dtype=int)
+        board = np.zeros(self.config.n_cards, dtype=int)
         reserved = {
-            1: np.zeros(self.n_cards, dtype = int),
-            2: np.zeros(self.n_cards, dtype = int)
+            1: np.zeros(self.config.n_cards, dtype = int),
+            2: np.zeros(self.config.n_cards, dtype = int)
         }
 
         # Draw 4 cards for each level
@@ -185,7 +168,7 @@ class SplendorGame():
             board[current_card_id] = 1
 
         # Pick 3 nobles
-        n_nobles = len(self.nobles)
+        n_nobles = len(self.config.nobles)
         nobles_board = np.zeros(n_nobles, dtype=int)
         n_to_sample = np.min([3, n_nobles])
         if self.randomize:
@@ -237,7 +220,7 @@ class SplendorGame():
             2: 0
         }
 
-        gained_nobles = {
+        gained_nobles : Dict[int, List[int]] = {
             1: [],
             2: []
         }
@@ -312,7 +295,7 @@ class SplendorGame():
         # 2 scores (for player + opponent)
         # 1 indicator for whether player went first
         # 10 nobles
-        return len(self.cards) * 3 + 10 + 12 + 2 + 1 + len(self.nobles)
+        return self.config.n_cards * 3 + 10 + 12 + 2 + 1 + self.config.n_nobles
 
     def checkBoard(self, m_or_b):
         pass
@@ -378,14 +361,14 @@ class SplendorGame():
         # 212 --> 2 Ks
         # 213 --> no coins
 
-        return self.n_cards * 2 + 3 + 10 + 10 + 5 + 5 + 1
+        return self.config.n_cards * 2 + 3 + 10 + 10 + 5 + 5 + 1
 
     def card_id_to_level(self, id):
-        if 0 <= id <= self.n_level_1_cards:
+        if 0 <= id <= self.config.n_level_1_cards:
             return 1
-        elif self.n_level_1_cards <= id <= self.n_level_1_cards + self.n_level_2_cards:
+        elif self.config.n_level_1_cards <= id <= self.config.n_level_1_cards + self.config.n_level_2_cards:
             return 2
-        elif self.n_level_1_cards + self.n_level_2_cards <= id <= self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards:
+        elif self.config.n_level_1_cards + self.config.n_level_2_cards <= id <= self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards:
             return 3
         else:
             raise Exception(f"id {id} isn't a valid card")
@@ -413,7 +396,7 @@ class SplendorGame():
 
         if action < 0:
             raise Exception("Action can't be negative")
-        elif action < self.n_cards:
+        elif action < self.config.n_cards:
             # Buy the card
             id_to_buy = action
             if self.states[m_or_b].board[id_to_buy] == 1:
@@ -437,7 +420,7 @@ class SplendorGame():
                     """)
 
             # Take away player's coins
-            card = self.cards[id_to_buy]
+            card = self.config.cards[id_to_buy]
             before_coins = self.states[m_or_b].coins[player].copy()
             for color in card.cost:
                 coins_needed = np.max([card.cost[color] - self.states[m_or_b].perma_gems[player][color], 0])
@@ -448,7 +431,7 @@ class SplendorGame():
 
                     self.states[m_or_b].coins[player][color] = 0
                 assert self.states[m_or_b].coins[player][color] >= 0 and self.states[m_or_b].coins[player][
-                    'y'] >= 0, f"""Negative coin values for player {player} after buying: {self.coins[player]}"""
+                    'y'] >= 0, f"""Negative coin values for player {player} after buying: {self.states[m_or_b].coins[player]}"""
 
             # Add card to player gem count
             before_gems = self.states[m_or_b].perma_gems.copy()
@@ -464,7 +447,7 @@ class SplendorGame():
             best_opponent_distance_score = np.inf
 
             for idx in np.where(self.states[m_or_b].nobles_board == 1)[0]:
-                noble = self.nobles[idx]
+                noble = self.config.nobles[idx]
                 qualified = True
 
                 for color in noble.cost:
@@ -487,11 +470,11 @@ class SplendorGame():
 
             if best_noble_i != -1:
                 # Noble acquired
-                self.states[m_or_b].scores[player] += self.nobles[best_noble_i].pv
+                self.states[m_or_b].scores[player] += self.config.nobles[best_noble_i].pv
 
-                self.states[m_or_b].gained_nobles[player].append(self.nobles[best_noble_i])
+                self.states[m_or_b].gained_nobles[player].append(self.config.nobles[best_noble_i])
 
-                noble_s = f"""Acquired noble: {self.nobles[best_noble_i]}"""
+                noble_s = f"""Acquired noble: {self.config.nobles[best_noble_i]}"""
 
                 # Delete noble from the list
                 self.states[m_or_b].nobles_board[best_noble_i] = 0
@@ -499,12 +482,12 @@ class SplendorGame():
             else:
                 noble_s = ""
 
-            action_str = f"""Player {player} bought card {id_to_buy}: {self.cards[id_to_buy]}"""
+            action_str = f"""Player {player} bought card {id_to_buy}: {self.config.cards[id_to_buy]}"""
 
 
-        elif action < self.n_cards * 2:
+        elif action < self.config.n_cards * 2:
             # Reserve card
-            id_to_reserve = action - self.n_cards
+            id_to_reserve = action - self.config.n_cards
 
             if self.states[m_or_b].board[id_to_reserve] == 1:
                 # Remove card from board
@@ -535,14 +518,14 @@ class SplendorGame():
                         np.where(np.array(list(self.states[m_or_b].coins[player].values()))[:5] > 0)[0])]
                     self.states[m_or_b].coins[player][random_color] -= 1
 
-            action_str = f"""Player {player} reserved card {id_to_reserve}: {self.cards[id_to_reserve]}"""
+            action_str = f"""Player {player} reserved card {id_to_reserve}: {self.config.cards[id_to_reserve]}"""
 
 
-        elif self.n_cards * 2 <= action <= self.n_cards * 2 + 2:
+        elif self.config.n_cards * 2 <= action <= self.config.n_cards * 2 + 2:
             # 180 --> Reserve level 1 card
             # 181 --> Reserve level 2 card
             # 182 --> Reserve level 3 card
-            level = action - (self.n_cards * 2) + 1
+            level = action - (self.config.n_cards * 2) + 1
             # Draw card from the appropriate deck
             new_id = self.states[m_or_b].id_decks[level].popleft()
             self.states[m_or_b].reserved[player][new_id] = 1
@@ -552,22 +535,22 @@ class SplendorGame():
             if self.states[m_or_b].coins[player]['y'] + self.states[m_or_b].coins[self.switch_player(player)]['y'] < 5:
                 self.states[m_or_b].coins[player]['y'] += 1
 
-            action_str = f"""Player {player} reserved card from level {level}: {self.cards[new_id]}"""
+            action_str = f"""Player {player} reserved card from level {level}: {self.config.cards[new_id]}"""
 
 
-        elif self.n_cards * 2 + 3 <= action <= self.n_cards * 2 + 32:
+        elif self.config.n_cards * 2 + 3 <= action <= self.config.n_cards * 2 + 32:
             # Take coins
             coins_string = self.take_coins_action_dict[action]
             before_coins = self.states[m_or_b].coins[player].copy()
             for color in coins_string:
                 # Check if can't take color
                 assert self.states[m_or_b].coins[player][color] + self.states[m_or_b].coins[self.switch_player(player)][
-                    color] < 4, f"Can't take color {color}. Player 1 has {self.coins[1][color]}. Player 2 has {self.coins[2][color]}"
+                    color] < 4, f"Can't take color {color}. Player 1 has {self.states[m_or_b].coins[1][color]}. Player 2 has {self.states[m_or_b].coins[2][color]}"
                 self.states[m_or_b].coins[player][color] += 1
 
             action_str = f"""Player {player} took coins: {coins_string}"""
 
-        elif action == self.n_cards * 2 + 33:
+        elif action == self.config.n_cards * 2 + 33:
             # Do nothing
             # print("##### DID NOTHING 1 #######")
             action_str = f"""Player {player} did nothing"""
@@ -575,7 +558,7 @@ class SplendorGame():
         else:
             raise Exception(f"Unrecognized action: {action}")
 
-        if action == self.n_cards * 2 + 33:
+        if action == self.config.n_cards * 2 + 33:
             # print("##### DID NOTHING 2 #######")
             self.states[m_or_b].consecutive_do_nothings += 1
         else:
@@ -612,7 +595,7 @@ class SplendorGame():
     def getValidMoves(self, board, player, m_or_b):
         start_time = time.time()
 
-        start_i = self.n_cards * 2
+        start_i = self.config.n_cards * 2
 
         s = self.stringRepresentation(player, m_or_b)
 
@@ -626,29 +609,29 @@ class SplendorGame():
 
         # 209 TOTAL
         # 0-89 cards to buy
-        for i in range(self.n_cards):
+        for i in range(self.config.n_cards):
             if (self.states[m_or_b].board[i] or self.states[m_or_b].reserved[player][i]) and self.can_buy(buying_power,
                                                                                                           self.states[
                                                                                                               m_or_b].coins[
                                                                                                               player][
                                                                                                               'y'],
-                                                                                                          self.cards[
+                                                                                                          self.config.cards[
                                                                                                               i].cost):
                 valid_moves[i] = 1
 
         # 90 - 179 cards to reserve
         if np.sum(self.states[m_or_b].reserved[player] == 1) < 3:
-            valid_moves[self.n_cards:self.n_cards * 2] = self.states[m_or_b].board
+            valid_moves[self.config.n_cards:self.config.n_cards * 2] = self.states[m_or_b].board
             # print(f"BOARD {m_or_b}: {self.states[m_or_b].board}")
             # print(f"Debug 2: {valid_moves}")
             # self.display_game_state(m_or_b)
             # 180, 181, 182: 3 random pile cards to reserve
             if not len(self.states[m_or_b].id_decks[1]) == 0:
-                valid_moves[self.n_cards  * 2] = 1
+                valid_moves[self.config.n_cards  * 2] = 1
             if not len(self.states[m_or_b].id_decks[2]) == 0:
-                valid_moves[self.n_cards  * 2 + 1] = 1
+                valid_moves[self.config.n_cards  * 2 + 1] = 1
             if not len(self.states[m_or_b].id_decks[3]) == 0:
-                valid_moves[self.n_cards  * 2 + 2] = 1
+                valid_moves[self.config.n_cards  * 2 + 2] = 1
 
         n_player_coins = np.sum(list(self.states[m_or_b].coins[player].values()))
         coins_left = {}
@@ -658,7 +641,7 @@ class SplendorGame():
 
         # 213 --> no coins
         if n_player_coins == 10:
-            valid_moves[self.n_cards  * 2 + 33] = 1
+            valid_moves[self.config.n_cards  * 2 + 33] = 1
 
         # 203 --> W
         # 204 --> U
@@ -668,7 +651,7 @@ class SplendorGame():
         elif n_player_coins == 9:
             for i, color in enumerate('wugrk'):
                 if coins_left[color] > 0:
-                    valid_moves[self.n_cards * 2 + 23 + i] = 1
+                    valid_moves[self.config.n_cards * 2 + 23 + i] = 1
 
 
         elif n_player_coins == 8:
@@ -679,7 +662,7 @@ class SplendorGame():
                     # 210 --> 2 Gs
                     # 211 --> 2 Rs
                     # 212 --> 2 Ks
-                    valid_moves[self.n_cards * 2 + 28 + i] = 1
+                    valid_moves[self.config.n_cards * 2 + 28 + i] = 1
 
             # 193 --> WU
             # 194 --> WG
@@ -789,26 +772,30 @@ class SplendorGame():
             self.log("Game ended on consecutive do nothings!", print_to_terminal = print_to_terminal and self.verbose)
             return -2
 
-        if np.sum(self.current_valid_moves) == 0:
+        if np.sum(self.current_valid_moves) == 0: # type: ignore
             self.log(f"Game ended on no valid moves!", print_to_terminal = print_to_terminal and self.verbose)
             return -1
 
         if player == 2:
             return 0
         if player == 1:  # Can only end if just ended player 2's turn (assuming player 1 went first)
-            winningConditionMet : bool = self.states[m_or_b].scores[1] >= self.target_score or self.states[m_or_b].scores[2] >= self.target_score
+            winningConditionMet : bool = self.states[m_or_b].scores[1] >= self.config.target_score or self.states[m_or_b].scores[2] >= self.config.target_score
             opponent : int = self.switch_player(player)
             if winningConditionMet:
-                log_string = f"Game ended. Player 1: {self.states[m_or_b].scores[1]} pts, player 2: {self.states[m_or_b].scores[2]} pts, target: {self.target_score} pts => "
+                log_string = f"Game ended. Player 1: {self.states[m_or_b].scores[1]} pts, player 2: {self.states[m_or_b].scores[2]} pts, target: {self.config.target_score} pts => "
 
                 if self.states[m_or_b].scores[1] == self.states[m_or_b].scores[2]:
-                    if self.dict_values_sum(self.states[m_or_b].perma_gems[player]) >= self.dict_values_sum(
-                            self.states[m_or_b].perma_gems[opponent]):
+                    player_gems = self.dict_values_sum(self.states[m_or_b].perma_gems[player])
+                    opponent_gems = self.dict_values_sum(self.states[m_or_b].perma_gems[opponent])
+                    if player_gems > opponent_gems:
                         self.log(log_string + f"Tied but player {player} has more permanent gems! -> Player {opponent} wins", print_to_terminal = print_to_terminal and self.verbose)
                         return -1
-                    else:
+                    elif player_gems < opponent_gems:
                         self.log(log_string + f"Tied but player {opponent} has more permanent gems! -> Player {player} wins", print_to_terminal = print_to_terminal and self.verbose)
                         return 1
+                    else:
+                        self.log(log_string + "Tied and both players have the same number of permanent gems! -> Draw", print_to_terminal = print_to_terminal and self.verbose)
+                        return -2
                 elif self.states[m_or_b].scores[player] > self.states[m_or_b].scores[opponent]:
                     self.log(log_string + f"Player {player} wins", print_to_terminal = print_to_terminal and self.verbose)
                     return 1
@@ -823,7 +810,7 @@ class SplendorGame():
                         Perma-gems: {self.states[m_or_b].perma_gems}
                     """)
             else:
-                self.log(f"Game not over yet since scores are {self.states[m_or_b].scores} and target score is {self.target_score}")
+                self.log(f"Game not over yet since scores are {self.states[m_or_b].scores} and target score is {self.config.target_score}")
                 return 0
 
     def getCanonicalForm(self, board, player, m_or_b):
@@ -888,8 +875,8 @@ class SplendorGame():
 
         # 292: player 1 score
         # 293: player 2 score
-        canonical_form[self.n_cards * 3 + 22] = str(canonical_form[self.n_cards * 3 + 22]).zfill(2)
-        canonical_form[self.n_cards * 3 + 23] = str(canonical_form[self.n_cards * 3 + 23]).zfill(2)
+        canonical_form[self.config.n_cards * 3 + 22] = str(canonical_form[self.config.n_cards * 3 + 22]).zfill(2)
+        canonical_form[self.config.n_cards * 3 + 23] = str(canonical_form[self.config.n_cards * 3 + 23]).zfill(2)
         time2 = time.time()
         # print(f"Stringy canon: {canonical_form}")
         #arr =  ''.join(map(str, canonical_form))
@@ -920,12 +907,12 @@ class SplendorGame():
         level_3_cards = []
 
         for i in np.where(self.states[m_or_b].board == 1)[0]:
-            if i < self.n_level_1_cards:
-                level_1_cards.append(self.cards[i])
-            elif i < self.n_level_1_cards + self.n_level_2_cards:
-                level_2_cards.append(self.cards[i])
-            elif i < self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards:
-                level_3_cards.append(self.cards[i])
+            if i < self.config.n_level_1_cards:
+                level_1_cards.append(self.config.cards[i])
+            elif i < self.config.n_level_1_cards + self.config.n_level_2_cards:
+                level_2_cards.append(self.config.cards[i])
+            elif i < self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards:
+                level_3_cards.append(self.config.cards[i])
             else:
                 raise Exception(f"Invalid card i {i}")
 
@@ -988,9 +975,9 @@ class SplendorGame():
         p2_cards = []
 
         for i in np.where(self.states[m_or_b].reserved[1] == 1)[0]:
-            p1_cards.append(self.cards[i])
+            p1_cards.append(self.config.cards[i])
         for i in np.where(self.states[m_or_b].reserved[2] == 1)[0]:
-            p2_cards.append(self.cards[i])
+            p2_cards.append(self.config.cards[i])
 
         return f"""
         Player 1: {' | '.join([str(card) for card in p1_cards])}
@@ -998,20 +985,20 @@ class SplendorGame():
 
     def beautify_nobles(self, m_or_b):
         return f"""
-        Available: {' | '.join([str(noble) for noble in np.array(self.nobles)[np.array(self.states[m_or_b].nobles_board).astype(bool)]])}
+        Available: {' | '.join([str(noble) for noble in np.array(self.config.nobles)[np.array(self.states[m_or_b].nobles_board).astype(bool)]])}
         Player 1: {' | '.join([str(noble) for noble in self.states[m_or_b].gained_nobles[1]])}
         Player 2: {' | '.join([str(noble) for noble in self.states[m_or_b].gained_nobles[2]])}"""
 
     def convert_action_to_readable(self, a):
-        if a < self.n_cards:
-            return f"Buy {self.cards[a]}"
-        elif a < self.n_cards * 2:
-            return f"Reserve {self.cards[a - self.n_cards]}"
-        elif a == self.n_cards * 2:
+        if a < self.config.n_cards:
+            return f"Buy {self.config.cards[a]}"
+        elif a < self.config.n_cards * 2:
+            return f"Reserve {self.config.cards[a - self.config.n_cards]}"
+        elif a == self.config.n_cards * 2:
             return "Reserve random 1"
-        elif a == self.n_cards * 2 + 1:
+        elif a == self.config.n_cards * 2 + 1:
             return "Reserve random 2"
-        elif a == self.n_cards * 2 + 2:
+        elif a == self.config.n_cards * 2 + 2:
             return "Reserve random 3"
         else:
             if a not in self.take_coins_action_dict:
@@ -1028,20 +1015,20 @@ class SplendorGame():
 
 
         # Board
-        for i in np.where(state[:self.n_cards] == 1)[0]:
-            if i < self.n_level_1_cards:
-                level_1_cards.append(self.cards[i])
-            elif i < self.n_level_1_cards + self.n_level_2_cards:
-                level_2_cards.append(self.cards[i])
-            elif i < self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards:
-                level_3_cards.append(self.cards[i])
+        for i in np.where(state[:self.config.n_cards] == 1)[0]:
+            if i < self.config.n_level_1_cards:
+                level_1_cards.append(self.config.cards[i])
+            elif i < self.config.n_level_1_cards + self.config.n_level_2_cards:
+                level_2_cards.append(self.config.cards[i])
+            elif i < self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards:
+                level_3_cards.append(self.config.cards[i])
             else:
                 raise Exception(f"Invalid card i {i}")
 
         # Coins left
         color_strs = []
-        coins_1 = state[(self.n_cards * 3 + 10):(self.n_cards * 3 + 16)]
-        coins_2 = state[(self.n_cards * 3 + 16):(self.n_cards * 3 + 22)]
+        coins_1 = state[(self.config.n_cards * 3 + 10):(self.config.n_cards * 3 + 16)]
+        coins_2 = state[(self.config.n_cards * 3 + 16):(self.config.n_cards * 3 + 22)]
 
         for i, color in enumerate('wugrk'):
             coins_left = 4 - coins_1[i] - coins_2[i]
@@ -1056,14 +1043,14 @@ class SplendorGame():
                 s += f"""
                 Player:
                 """
-                gems = state[(self.n_cards * 3): (self.n_cards * 3 + 5)]
-                coins = state[(self.n_cards * 3 + 10): (self.n_cards * 3 + 16)]
+                gems = state[(self.config.n_cards * 3): (self.config.n_cards * 3 + 5)]
+                coins = state[(self.config.n_cards * 3 + 10): (self.config.n_cards * 3 + 16)]
             else:
                 s += f"""
                 Opponent:
                 """
-                gems = state[(self.n_cards * 3 + 5): (self.n_cards * 3 + 10)]
-                coins = state[(self.n_cards * 3 + 16): (self.n_cards * 3 + 22)]
+                gems = state[(self.config.n_cards * 3 + 5): (self.config.n_cards * 3 + 10)]
+                coins = state[(self.config.n_cards * 3 + 16): (self.config.n_cards * 3 + 22)]
 
             for i, color in enumerate('wugrk'):
                 if gems[i] > 0:
@@ -1077,15 +1064,15 @@ class SplendorGame():
         p1_cards = []
         p2_cards = []
 
-        for i in np.where(state[self.n_cards:(self.n_cards * 2)] == 1)[0]:
-            p1_cards.append(self.cards[i])
-        for i in np.where(state[(self.n_cards * 2):(self.n_cards * 3)] == 1)[0]:
-            p2_cards.append(self.cards[i])
+        for i in np.where(state[self.config.n_cards:(self.config.n_cards * 2)] == 1)[0]:
+            p1_cards.append(self.config.cards[i])
+        for i in np.where(state[(self.config.n_cards * 2):(self.config.n_cards * 3)] == 1)[0]:
+            p2_cards.append(self.config.cards[i])
 
         if just_print:
             print(f"""
             {tabs}Scores:
-            {tabs}    1: {state[self.n_cards * 3 + 22]} | 2: {state[self.n_cards * 3 + 23]}
+            {tabs}    1: {state[self.config.n_cards * 3 + 22]} | 2: {state[self.config.n_cards * 3 + 23]}
             {tabs}
             {tabs}Board:
             {tabs}    Level 3: {' | '.join([str(card) for card in level_3_cards])}
@@ -1093,7 +1080,7 @@ class SplendorGame():
             {tabs}    Level 1: {' | '.join([str(card) for card in level_1_cards])}
             {tabs}
             {tabs}Nobles:
-            {tabs}      Available: {' | '.join([str(noble) for noble in np.array(self.nobles)[np.array(state[(self.n_cards * 3 + 25):(self.n_cards * 3 + 35)]).astype(bool)]])}
+            {tabs}      Available: {' | '.join([str(noble) for noble in np.array(self.config.nobles)[np.array(state[(self.config.n_cards * 3 + 25):(self.config.n_cards * 3 + 35)]).astype(bool)]])}
             {tabs}    
             {tabs}Coins left:
             {tabs}    {' '.join(color_strs)}
@@ -1108,7 +1095,7 @@ class SplendorGame():
         else:
             self.log(f"""
             {tabs}Scores:
-            {tabs}    1: {state[self.n_cards * 3 + 22]} | 2: {state[self.n_cards * 3 + 23]}
+            {tabs}    1: {state[self.config.n_cards * 3 + 22]} | 2: {state[self.config.n_cards * 3 + 23]}
             {tabs}
             {tabs}Board:
             {tabs}    Level 3: {' | '.join([str(card) for card in level_3_cards])}
@@ -1116,7 +1103,7 @@ class SplendorGame():
             {tabs}    Level 1: {' | '.join([str(card) for card in level_1_cards])}
             {tabs}
             {tabs}Nobles:
-            {tabs}      Available: {' | '.join([str(noble) for noble in np.array(self.nobles)[np.array(state[(self.n_cards * 3 + 25):(self.n_cards * 3 + 35)]).astype(bool)]])}
+            {tabs}      Available: {' | '.join([str(noble) for noble in np.array(self.config.nobles)[np.array(state[(self.config.n_cards * 3 + 25):(self.config.n_cards * 3 + 35)]).astype(bool)]])}
             {tabs}    
             {tabs}Coins left:
             {tabs}    {' '.join(color_strs)}
@@ -1211,15 +1198,15 @@ class SplendorGame():
             if "RESERVE" in input_action.upper():
                 if "RANDOM" in input_action.upper():
                     if "1" in input_action:
-                        return self.n_cards * 2
+                        return self.config.n_cards * 2
                     elif "2" in input_action:
-                        return self.n_cards * 2 + 1
+                        return self.config.n_cards * 2 + 1
                     elif "3" in input_action:
-                        return self.n_cards * 2 + 2
+                        return self.config.n_cards * 2 + 2
                     else:
                         raise Exception(f"Invalid random reserve action: {input_action}")
 
-                action_addition = self.n_cards
+                action_addition = self.config.n_cards
 
             match = re.search(r"\b\d+\s*,\s*\d+\b", input_action)
 
@@ -1236,21 +1223,21 @@ class SplendorGame():
 
             if level == 1:
                 lower_bound = 0
-                upper_bound = self.n_level_1_cards
+                upper_bound = self.config.n_level_1_cards
 
             elif level == 2:
-                lower_bound = self.n_level_1_cards
-                upper_bound = self.n_level_1_cards + self.n_level_2_cards
+                lower_bound = self.config.n_level_1_cards
+                upper_bound = self.config.n_level_1_cards + self.config.n_level_2_cards
             elif level == 3:
-                lower_bound = self.n_level_1_cards + self.n_level_2_cards
-                upper_bound = self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards
+                lower_bound = self.config.n_level_1_cards + self.config.n_level_2_cards
+                upper_bound = self.config.n_level_1_cards + self.config.n_level_2_cards + self.config   .n_level_3_cards
             else:
                 raise Exception(f"Invalid level {level}")
 
             card_i = np.where(self.states[m_or_b].board[lower_bound:upper_bound] == 1)[0][column]
             # print(f"column: {column}, card: {card_i + lower_bound}")
 
-            action = card_i + lower_bound + action_addition
+            action = card_i + lower_bound + action_addition  # type: ignore
 
             return action
 
@@ -1272,23 +1259,23 @@ class SplendorGame():
         tabs = "\t\t\t"
         self.log(f"""
         {tabs}VALID:
-        {tabs}Level 1 buy:{np.where(self.current_valid_moves[:self.n_level_1_cards] == 1)[0]}
-        {tabs}Level 2 buy:{np.where(self.current_valid_moves[self.n_level_1_cards:(self.n_level_1_cards + self.n_level_2_cards)] == 1)[0] + self.n_level_1_cards}
-        {tabs}Level 3 buy:{np.where(self.current_valid_moves[(self.n_level_1_cards + self.n_level_2_cards):(self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards)] == 1)[0] + self.n_level_1_cards + self.n_level_2_cards}
+        {tabs}Level 1 buy:{np.where(self.current_valid_moves[:self.config.n_level_1_cards] == 1)[0]}
+        {tabs}Level 2 buy:{np.where(self.current_valid_moves[self.config.n_level_1_cards:(self.config.n_level_1_cards + self.config.n_level_2_cards)] == 1)[0] + self.config.n_level_1_cards}
+        {tabs}Level 3 buy:{np.where(self.current_valid_moves[(self.config.n_level_1_cards + self.config.n_level_2_cards):(self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards)] == 1)[0] + self.config.n_level_1_cards + self.config.n_level_2_cards}
 
-        {tabs}Level 1 reserve:{np.where(self.current_valid_moves[self.n_cards:(self.n_cards + self.n_level_1_cards)] == 1)[0]}
-        {tabs}Level 2 reserve:{np.where(self.current_valid_moves[(self.n_cards + self.n_level_1_cards):(self.n_cards + self.n_level_1_cards + self.n_level_2_cards)] == 1)[0] + self.n_level_1_cards}
-        {tabs}Level 3 reserve:{np.where(self.current_valid_moves[(self.n_cards + self.n_level_1_cards + self.n_level_2_cards):(self.n_cards + self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards)] == 1)[0] + self.n_level_1_cards + self.n_level_2_cards}
+        {tabs}Level 1 reserve:{np.where(self.current_valid_moves[self.config.n_cards:(self.config.n_cards + self.config.n_level_1_cards)] == 1)[0]}
+        {tabs}Level 2 reserve:{np.where(self.current_valid_moves[(self.config.n_cards + self.config.n_level_1_cards):(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards)] == 1)[0] + self.config.n_level_1_cards}
+        {tabs}Level 3 reserve:{np.where(self.current_valid_moves[(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards):(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards)] == 1)[0] + self.config.n_level_1_cards + self.config.n_level_2_cards}
 
-        {tabs}Level 1 reserve random:{self.current_valid_moves[self.n_cards * 2]}
-        {tabs}Level 2 reserve random:{self.current_valid_moves[self.n_cards * 2 + 1]}
-        {tabs}Level 3 reserve random:{self.current_valid_moves[self.n_cards * 2 + 2]}
+        {tabs}Level 1 reserve random:{self.current_valid_moves[self.config.n_cards * 2]}
+        {tabs}Level 2 reserve random:{self.current_valid_moves[self.config.n_cards * 2 + 1]}
+        {tabs}Level 3 reserve random:{self.current_valid_moves[self.config.n_cards * 2 + 2]}
 
-        {tabs}Taking 3 coins:{self.current_valid_moves[(self.n_cards * 2 + 3):(self.n_cards * 2 + 13)]}
-        {tabs}Taking 2 coins:{self.current_valid_moves[(self.n_cards * 2 + 13):(self.n_cards * 2 + 23)]}
-        {tabs}Taking 1 coins:{self.current_valid_moves[(self.n_cards * 2 + 23):(self.n_cards * 2 + 28)]}
-        {tabs}Taking 2 coins of the same color:{self.current_valid_moves[(self.n_cards * 2 + 28):(self.n_cards * 2 + 33)]}
-        {tabs}Taking no coins:{self.current_valid_moves[self.n_cards * 2 + 33]}
+        {tabs}Taking 3 coins:{self.current_valid_moves[(self.config.n_cards * 2 + 3):(self.config.n_cards * 2 + 13)]}
+        {tabs}Taking 2 coins:{self.current_valid_moves[(self.config.n_cards * 2 + 13):(self.config.n_cards * 2 + 23)]}
+        {tabs}Taking 1 coins:{self.current_valid_moves[(self.config.n_cards * 2 + 23):(self.config.n_cards * 2 + 28)]}
+        {tabs}Taking 2 coins of the same color:{self.current_valid_moves[(self.config.n_cards * 2 + 28):(self.config.n_cards * 2 + 33)]}
+        {tabs}Taking no coins:{self.current_valid_moves[self.config.n_cards * 2 + 33]}
         """)
 
 
@@ -1303,20 +1290,20 @@ class SplendorGame():
             if "PRINT" in input_action.upper():
                 if "BOARD" in input_action.upper():
                     print("Board")
-                    print(f"Level 1:{self.states['main'].board[:self.n_level_1_cards]}")
-                    print(f"Level 2:{self.states['main'].board[self.n_level_1_cards:self.n_level_1_cards + self.n_level_2_cards]}")
-                    print(f"Level 3:{self.states['main'].board[self.n_level_1_cards + self.n_level_2_cards:self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards]}")
+                    print(f"Level 1:{self.states['main'].board[:self.config.n_level_1_cards]}")
+                    print(f"Level 2:{self.states['main'].board[self.config.n_level_1_cards:self.config.n_level_1_cards + self.config.n_level_2_cards]}")
+                    print(f"Level 3:{self.states['main'].board[self.config.n_level_1_cards + self.config.n_level_2_cards:self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards]}")
 
                 if "RESERVED" in input_action.upper():
                     print("Player 1:")
-                    print(f"Level 1:{self.states['main'].reserved[1][:self.n_level_1_cards]}")
-                    print(f"Level 2:{self.states['main'].reserved[1][self.n_level_1_cards:self.n_level_1_cards + self.n_level_2_cards]}")
-                    print(f"Level 3:{self.states['main'].reserved[1][self.n_level_1_cards + self.n_level_2_cards:self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards]}")
+                    print(f"Level 1:{self.states['main'].reserved[1][:self.config.n_level_1_cards]}")
+                    print(f"Level 2:{self.states['main'].reserved[1][self.config.n_level_1_cards:self.config.n_level_1_cards + self.config.n_level_2_cards]}")
+                    print(f"Level 3:{self.states['main'].reserved[1][self.config.n_level_1_cards + self.config.n_level_2_cards:self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards]}")
 
                     print("Player 2:")
-                    print(f"Level 1:{self.states['main'].reserved[2][:self.n_level_1_cards]}")
-                    print(f"Level 2:{self.states['main'].reserved[2][self.n_level_1_cards:self.n_level_1_cards + self.n_level_2_cards]}")
-                    print(f"Level 3:{self.states['main'].reserved[2][self.n_level_1_cards + self.n_level_2_cards:self.n_level_1_cards + self.n_level_2_cards + self.n_level_3_cards]}")
+                    print(f"Level 1:{self.states['main'].reserved[2][:self.config.n_level_1_cards]}")
+                    print(f"Level 2:{self.states['main'].reserved[2][self.config.n_level_1_cards:self.config.n_level_1_cards + self.config.n_level_2_cards]}")
+                    print(f"Level 3:{self.states['main'].reserved[2][self.config.n_level_1_cards + self.config.n_level_2_cards:self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards]}")
 
                 if "VALID" in input_action.upper():
                     self.display_valid_moves(current_player, 'main')
@@ -1361,12 +1348,12 @@ class SplendorGame():
             current_player = 3 - current_player
 
     def interpret_action(self, x):
-        if x < self.n_cards:
-            return f"Bought card {x}: {self.cards[x]}"
-        elif x < self.n_cards * 2:
-            return f"Reserved card {x - self.n_cards}: {self.cards[x - self.n_cards]}"
-        elif self.n_cards * 2 <= x <= self.n_cards * 2 + 2:
-            return f"Reserved random card from deck {x - self.n_cards * 2 + 1}"
+        if x < self.config.n_cards:
+            return f"Bought card {x}: {self.config.cards[x]}"
+        elif x < self.config.n_cards * 2:
+            return f"Reserved card {x - self.config.n_cards}: {self.config.cards[x - self.config.n_cards]}"
+        elif self.config.n_cards * 2 <= x <= self.config.n_cards * 2 + 2:
+            return f"Reserved random card from deck {x - self.config.n_cards * 2 + 1}"
         else:
             return f"Took coins {self.take_coins_action_dict[x]}"
 
