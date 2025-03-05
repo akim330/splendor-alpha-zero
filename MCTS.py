@@ -7,6 +7,8 @@ from Logger import logger, LoggingSource
 import numpy as np
 import pandas as pd
 
+from splendor.SplendorGame import SplendorGame
+
 EPS = 1e-8
 
 log = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ class MCTS():
     """
 
     def __init__(self, game, nnet, args):
-        self.game = game
+        self.game : SplendorGame = game
         self.nnet = nnet
         self.args = args
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
@@ -145,8 +147,6 @@ class MCTS():
 
         time1 = time.time()
 
-        self.game.set_current_valid_moves(player, m_or_b)
-
         time2 = time.time()
 
         # See if we had consecutive do nothings
@@ -156,7 +156,7 @@ class MCTS():
         # Check if we know whether s is a terminal state
         if s not in self.Es:
             # If we don't know, then figure out if s is a terminal state
-            self.Es[s] = self.game.getGameEnded(None, player, m_or_b)
+            self.Es[s] = self.game.getGameEnded(player, m_or_b)
         # If s is a terminal state, get the value (+1 if win or -1 if lost)
         if self.Es[s] != 0:
             self.log(f"{tabs}MCTS: s is terminal")
@@ -183,7 +183,7 @@ class MCTS():
             self.times['nn'] += time.time()  - nn_start_time
 
             # Valid moves for this state (canonicalBoard means just from the point of view of the current player, so "player" is just 1)
-            valids = self.game.current_valid_moves
+            valids = self.game.getValidMoves(player, m_or_b)
             # print(f"DEBUG 4: {valids}")
 
             # Only take the probabilities for the valid moves
@@ -272,7 +272,7 @@ class MCTS():
         self.log(f"{tabs}Taking best action by UCT: {best_act}, leading to new state:")
 
         a = best_act
-        next_s, next_player = self.game.getNextState(None, player, a, m_or_b, print_to_terminal = False)
+        next_s, next_player = self.game.getNextState(player, a, m_or_b, print_to_terminal = False)
         next_s = self.game.getCanonicalForm(next_s, next_player, m_or_b)
 
         if a == self.game.n_actions - 1:

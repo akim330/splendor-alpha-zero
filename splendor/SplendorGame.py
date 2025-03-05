@@ -31,6 +31,7 @@ cards_per_row_count = 4
 
 randomize_branch = False
 
+
 class SplendorGameState():
     def __init__(self, id_decks : Dict[int, deque[int]], board : NDArray[np.int_], reserved : Dict[int, NDArray[np.int_]], nobles_board : NDArray[np.int_], coins : Dict[int, Dict[str, int]], perma_gems : Dict[int, Dict[str, int]], scores : Dict[int, int], gained_nobles : Dict[int, List[int]],
                  consecutive_do_nothings : int):
@@ -60,8 +61,6 @@ class SplendorGame():
         self.states = {}
 
         self.randomize : bool = randomize
-
-        self.current_valid_moves = []
 
         self.n_actions : int = self.config.n_cards * 2 + 33 + 1
 
@@ -367,7 +366,7 @@ class SplendorGame():
             new_id = self.states[m_or_b].id_decks[level].popleft()
             self.states[m_or_b].board[new_id] = 1
 
-    def getNextState(self, board, player, action, m_or_b, print_to_terminal = False):
+    def getNextState(self, player, action, m_or_b, print_to_terminal = False):
         start_time = time.time()
 
         # if player takes action on board, return next (board,player)
@@ -570,12 +569,9 @@ class SplendorGame():
         for color in card_cost:
             if card_cost[color] > buying_power[color]:
                 yellow_needed += card_cost[color] - buying_power[color]
-        return yellow_possessed >= yellow_needed
+        return yellow_possessed >= yellow_needed        
 
-    def set_current_valid_moves(self, player, m_or_b):
-        self.current_valid_moves = self.getValidMoves(None, player, m_or_b)
-
-    def getValidMoves(self, board, player, m_or_b):
+    def getValidMoves(self, player, m_or_b):
         start_time = time.time()
 
         start_i = self.config.n_cards * 2
@@ -747,15 +743,23 @@ class SplendorGame():
     def dict_values_sum(self, dict):
         return np.sum(np.array(list(dict.values())))
 
-    def getGameEnded(self, board, player, m_or_b, print_to_terminal = False):
+    def getGameEnded(self, player, m_or_b, print_to_terminal = False, debug_override = False):
         # return 0 if not ended, 1 if player 1 won, -1 if player 1 lost
+        if debug_override:
+            logger.set_verbose(True)
+            self.log(f"DEBUG", print_to_terminal = True)
+            self.log(f"SCORES: {self.states[m_or_b].scores}", print_to_terminal = True)
+            self.log(f"PERMA-GEMS: {self.states[m_or_b].perma_gems}", print_to_terminal = True)
+            print_to_terminal = True
+
+        current_valid_moves = self.getValidMoves(player, m_or_b)
 
         # print(f"#### ARE THERE CONSECUTIVE DO NOTHINGS? {self.states[m_or_b].consecutive_do_nothings}")
         if self.states[m_or_b].consecutive_do_nothings >= 2:
             self.log("Game ended on consecutive do nothings!", print_to_terminal = print_to_terminal)
             return -2
 
-        if np.sum(self.current_valid_moves) == 0: # type: ignore
+        if np.sum(current_valid_moves) == 0: # type: ignore
             self.log(f"Game ended on no valid moves!", print_to_terminal = print_to_terminal)
             return -1
 
@@ -795,6 +799,9 @@ class SplendorGame():
             else:
                 self.log(f"Game not over yet since scores are {self.states[m_or_b].scores} and target score is {self.config.target_score}")
                 return 0
+        
+        if debug_override:
+            logger.set_verbose(False)
 
     def getCanonicalForm(self, board, player, m_or_b):
         # return state from the point of view of player
@@ -1239,26 +1246,27 @@ class SplendorGame():
             raise Exception(f"No recognized keyword in action: {input_action}")
 
     def display_valid_moves(self, player, m_or_b):
+        current_valid_moves = self.getValidMoves(player, m_or_b)
         tabs = "\t\t\t"
         self.log(f"""
         {tabs}VALID:
-        {tabs}Level 1 buy:{np.where(self.current_valid_moves[:self.config.n_level_1_cards] == 1)[0]}
-        {tabs}Level 2 buy:{np.where(self.current_valid_moves[self.config.n_level_1_cards:(self.config.n_level_1_cards + self.config.n_level_2_cards)] == 1)[0] + self.config.n_level_1_cards}
-        {tabs}Level 3 buy:{np.where(self.current_valid_moves[(self.config.n_level_1_cards + self.config.n_level_2_cards):(self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards)] == 1)[0] + self.config.n_level_1_cards + self.config.n_level_2_cards}
+        {tabs}Level 1 buy:{np.where(current_valid_moves[:self.config.n_level_1_cards] == 1)[0]}
+        {tabs}Level 2 buy:{np.where(current_valid_moves[self.config.n_level_1_cards:(self.config.n_level_1_cards + self.config.n_level_2_cards)] == 1)[0] + self.config.n_level_1_cards}
+        {tabs}Level 3 buy:{np.where(current_valid_moves[(self.config.n_level_1_cards + self.config.n_level_2_cards):(self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards)] == 1)[0] + self.config.n_level_1_cards + self.config.n_level_2_cards}
 
-        {tabs}Level 1 reserve:{np.where(self.current_valid_moves[self.config.n_cards:(self.config.n_cards + self.config.n_level_1_cards)] == 1)[0]}
-        {tabs}Level 2 reserve:{np.where(self.current_valid_moves[(self.config.n_cards + self.config.n_level_1_cards):(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards)] == 1)[0] + self.config.n_level_1_cards}
-        {tabs}Level 3 reserve:{np.where(self.current_valid_moves[(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards):(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards)] == 1)[0] + self.config.n_level_1_cards + self.config.n_level_2_cards}
+        {tabs}Level 1 reserve:{np.where(current_valid_moves[self.config.n_cards:(self.config.n_cards + self.config.n_level_1_cards)] == 1)[0]}
+        {tabs}Level 2 reserve:{np.where(current_valid_moves[(self.config.n_cards + self.config.n_level_1_cards):(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards)] == 1)[0] + self.config.n_level_1_cards}
+        {tabs}Level 3 reserve:{np.where(current_valid_moves[(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards):(self.config.n_cards + self.config.n_level_1_cards + self.config.n_level_2_cards + self.config.n_level_3_cards)] == 1)[0] + self.config.n_level_1_cards + self.config.n_level_2_cards}
 
-        {tabs}Level 1 reserve random:{self.current_valid_moves[self.config.n_cards * 2]}
-        {tabs}Level 2 reserve random:{self.current_valid_moves[self.config.n_cards * 2 + 1]}
-        {tabs}Level 3 reserve random:{self.current_valid_moves[self.config.n_cards * 2 + 2]}
+        {tabs}Level 1 reserve random:{current_valid_moves[self.config.n_cards * 2]}
+        {tabs}Level 2 reserve random:{current_valid_moves[self.config.n_cards * 2 + 1]}
+        {tabs}Level 3 reserve random:{current_valid_moves[self.config.n_cards * 2 + 2]}
 
-        {tabs}Taking 3 coins:{self.current_valid_moves[(self.config.n_cards * 2 + 3):(self.config.n_cards * 2 + 13)]}
-        {tabs}Taking 2 coins:{self.current_valid_moves[(self.config.n_cards * 2 + 13):(self.config.n_cards * 2 + 23)]}
-        {tabs}Taking 1 coins:{self.current_valid_moves[(self.config.n_cards * 2 + 23):(self.config.n_cards * 2 + 28)]}
-        {tabs}Taking 2 coins of the same color:{self.current_valid_moves[(self.config.n_cards * 2 + 28):(self.config.n_cards * 2 + 33)]}
-        {tabs}Taking no coins:{self.current_valid_moves[self.config.n_cards * 2 + 33]}
+        {tabs}Taking 3 coins:{current_valid_moves[(self.config.n_cards * 2 + 3):(self.config.n_cards * 2 + 13)]}
+        {tabs}Taking 2 coins:{current_valid_moves[(self.config.n_cards * 2 + 13):(self.config.n_cards * 2 + 23)]}
+        {tabs}Taking 1 coins:{current_valid_moves[(self.config.n_cards * 2 + 23):(self.config.n_cards * 2 + 28)]}
+        {tabs}Taking 2 coins of the same color:{current_valid_moves[(self.config.n_cards * 2 + 28):(self.config.n_cards * 2 + 33)]}
+        {tabs}Taking no coins:{current_valid_moves[self.config.n_cards * 2 + 33]}
         """)
 
 
@@ -1303,16 +1311,16 @@ class SplendorGame():
                 """)
                 continue
 
-            valid_moves = self.getValidMoves(None, current_player, 'main')
+            valid_moves = self.getValidMoves(current_player, 'main')
             if action not in np.where(valid_moves == 1)[0]:
                 print(f"""
                 Action {action} not possible in the game state. Please try again
                 """)
                 continue
 
-            self.getNextState(None, current_player, action, 'main')
+            self.getNextState(current_player, action, 'main')
 
-            game_end_result = self.getGameEnded(None, current_player, 'main')
+            game_end_result = self.getGameEnded(current_player, 'main')
 
             if game_end_result in [-1, 1]:
                 if game_end_result == 1:
@@ -1350,7 +1358,7 @@ class SplendorGame():
             print(f"TURN {turn}")
             self.display_game_state(m_to_b)
 
-            valid_moves = self.getValidMoves(None, current_player, m_to_b)
+            valid_moves = self.getValidMoves(current_player, m_to_b)
             if np.sum(valid_moves) > 1:
                 # Don't do nothing if there are multiple actions available
                 action = np.random.choice(np.where(valid_moves[:213] == 1)[0])
@@ -1365,9 +1373,9 @@ class SplendorGame():
             print(f"""Player {current_player} action: {self.interpret_action(action)}
                   """)
 
-            self.getNextState(None, current_player, action, m_to_b)
+            self.getNextState(current_player, action, m_to_b)
 
-            game_end_result = self.getGameEnded(None, current_player, m_to_b)
+            game_end_result = self.getGameEnded(current_player, m_to_b)
 
             if game_end_result in [-1, 1]:
                 if game_end_result == 1:
@@ -1402,6 +1410,25 @@ class SplendorGame():
     #
     #     print("-----------------------")
 
+
+
+class SplendorGameFactory():
+    def __init__(self, game_variant : SplendorGameVariant, randomize_game : bool):
+        self.game_variant = game_variant
+        self.randomize_game = randomize_game
+        self.sample_game : SplendorGame = SplendorGame(game_variant=game_variant, randomize=randomize_game)
+
+    def create_game(self) -> SplendorGame:
+        return SplendorGame(game_variant=self.game_variant, randomize=self.randomize_game)
+    
+    def get_action_size(self) -> int:
+        return self.sample_game.getActionSize()
+
+    def get_board_size(self) -> int:
+        return self.sample_game.getBoardSize()
+    
+    def display_training_example(self, train_example : tuple[np.ndarray, np.ndarray, float]):
+        self.sample_game.display_training_example(train_example)
 
 if __name__ == "__main__":
     results = np.zeros(1000)

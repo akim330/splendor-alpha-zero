@@ -1,6 +1,34 @@
 from abc import ABC
 from enum import Enum
 from typing import Dict, List
+from utils import dotdict
+
+
+class SplendorGameVariant(Enum):
+    LEVEL_0_2G1U = "level_0_2g1u"
+    LEVEL_0_4U = "level_0_4u"
+    LEVEL_1_GRK = "level_1_grk"
+    VANILLA = "vanilla"
+
+
+args = dotdict({
+    'numIters': 1000,
+    'numEps': 100,              # Number of complete self-play games to simulate during a new iteration.
+    'tempThreshold': 15,        # 
+    'updateThreshold': 0.55,     # During arena playoff, new neural net will be accepted if threshold or more of games are won.
+    'maxlenOfQueue': 200000,    # Number of game examples to train the neural networks.
+    'numMCTSSims': 100,          # Number of games moves for MCTS to simulate.
+    'arenaCompare': 40,         # Number of games to play during arena play to determine if new net will be accepted.
+    'cpuct': 2,
+    'game_type': SplendorGameVariant.LEVEL_0_4U,
+    'checkpoint': './temp/',
+    'load_model': False,
+    'load_folder_file': ('/dev/models/8x100x50','best.pth.tar'),
+    'numItersForTrainExamplesHistory': 20,
+    'verbose': True,
+    'debug_self_play_with_temp_0': True,
+    'randomize': False
+})
 
 
 class Card():
@@ -44,12 +72,6 @@ class Noble():
                 cost_strs.append(f"{self.cost[color]}{color.upper()}")
 
         return f"Noble(id={self.id}, PV={self.pv}, {' ,'.join(cost_strs)})".ljust(30)
-
-class SplendorGameVariant(Enum):
-    LEVEL_0_2G1U = "level_0_2g1u"
-    LEVEL_0_4U = "level_0_4u"
-    LEVEL_1_GRK = "level_1_grk"
-    VANILLA = "vanilla"
 
 # Abstract configuration class
 class SplendorConfig(ABC):

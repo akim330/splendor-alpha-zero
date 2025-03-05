@@ -9,10 +9,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 class SplendorNNet(nn.Module):
-    def __init__(self, game, args):
+    def __init__(self, input_size, action_size, args):
         # game params
-        self.input_size = game.getBoardSize()
-        self.action_size = game.getActionSize()
+        self.input_size = input_size
+        self.action_size = action_size
         self.args = args
 
         super(SplendorNNet, self).__init__()

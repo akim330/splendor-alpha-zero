@@ -12,7 +12,7 @@ from NeuralNet import NeuralNet
 import torch
 import torch.optim as optim
 
-from .SplendorNNet import SplendorNNet as onnet
+from .SplendorNNet import SplendorNNet
 
 args = dotdict({
     'lr': 0.001,
@@ -26,27 +26,11 @@ args = dotdict({
 
 
 class NNetWrapper(NeuralNet):
-    def __init__(self, game, verbose = False, output = "print", debug_file_path = None, nn_deep_dive = False):
-        self.nnet = onnet(game, args)
-        # self.board_x, self.board_y = game.getBoardSize()
-        self.action_size = game.getActionSize()
+    def __init__(self, input_size, action_size):
+        self.nnet = SplendorNNet(input_size, action_size, args)
 
-        self.nn_deep_dive = nn_deep_dive
-
-        self.verbose = verbose
         if args.cuda:
             self.nnet.cuda()
-
-        self.output = output
-        self.debug_file_path = debug_file_path
-
-    def log(self, s):
-        if self.output == 'file':
-            with open(self.debug_file_path, 'a') as f:
-                f.write(f"{s}\n")
-
-        elif self.output == 'print':
-            print(s)
 
     def train(self, examples):
         """
@@ -91,7 +75,7 @@ class NNetWrapper(NeuralNet):
                 total_loss.backward()
                 optimizer.step()
 
-    def predict(self, board):
+    def predict(self, board): # type: ignore
         """
         board: np array with board
         """
