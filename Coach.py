@@ -1,4 +1,5 @@
-import logging
+from Logger import logger, LoggingSource
+from splendor.SplendorGame import SplendorGame
 import os
 import sys
 import time
@@ -12,8 +13,9 @@ from tqdm import tqdm
 from Arena import Arena
 from MCTS import MCTS
 
-log = logging.getLogger(__name__)
+import logging
 
+log = logging.getLogger(__name__)
 
 class Coach():
     """
@@ -21,20 +23,14 @@ class Coach():
     in Game and NeuralNet. args are specified in main.py.
     """
 
-    def __init__(self, game, nnet, args, verbose, output = 'print', debug_file_path = None, display_time = False, display_all = False, nn_deep_dive = False):
-        self.game = game
+    def __init__(self, game, nnet, args):
+        self.game : SplendorGame = game
         self.nnet = nnet
         self.pnet = self.nnet.__class__(self.game)  # the competitor network
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet, self.args, verbose = verbose, display_time=display_time)
+        self.mcts = MCTS(self.game, self.nnet, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
-        self.verbose = verbose
-
-        self.nn_deep_dive = nn_deep_dive
-
-        self.output = output
-        self.debug_file_path = debug_file_path
 
         self.first_action = None
         self.first_nn_value = np.empty(0)
@@ -47,8 +43,6 @@ class Coach():
 
         self.reset_times()
 
-        self.display_time = display_time
-        self.display_all = display_all
 
     def reset_times(self):
         self.times = {
@@ -58,28 +52,10 @@ class Coach():
             'get_game_ended': 0.0
         }
 
-    def log(self, s, debug_file_path = None, print_to_terminal = False):
-        if not debug_file_path:
-            debug_file_path = self.debug_file_path
-        if self.output == 'file':
-            if debug_file_path is None:
-                raise ValueError("debug_file_path is not set")
-            with open(debug_file_path, 'a') as f:
-                f.write(f"{s}\n")
-            if print_to_terminal:
-                print(s)
+    def log(self, s, print_to_terminal = False):
+        logger.log(s, source=LoggingSource.COACH, print_to_terminal=print_to_terminal)
 
-        elif self.output == 'print':
-            print(s)
-    
-    def clear_logs(self):
-        if self.output == 'file':
-            if self.debug_file_path is None:
-                raise ValueError("debug_file_path is not set")
-            with open(self.debug_file_path, 'w') as f:
-                f.write('')
-
-    def executeEpisode(self, round_number, game_number, nn_version, new_nn_version = False):
+    def executeEpisode(self, nn_version, new_nn_version = False, temp_override = None):
         """
         This function executes one episode of self-play, starting with player 1.
         As the game is played, each turn is added as a training example to
@@ -117,42 +93,40 @@ class Coach():
             # Get state value before taking action
             _, state_value = self.nnet.predict(canonicalBoard)
 
-            temp = int(episodeStep < self.args.tempThreshold)
-            if self.verbose:
-                self.log(f"Coach: TURN {episodeStep}: let's see the state")
-                self.game.display_game_state(m_or_b)
+            temp = int(episodeStep < self.args.tempThreshold) if temp_override is None else temp_override
+            self.log(f"Coach: TURN {episodeStep}: let's see the state")
+            self.game.display_game_state(m_or_b)
 
             #pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
             time1 = time.time()
-            pi = self.mcts.getActionProb(self.curPlayer, temp=temp)
+            pi : list[float] = self.mcts.getActionProb(self.curPlayer, temp=temp)
             time2 = time.time()
             sym = self.game.getSymmetries(canonicalBoard, pi)
             for b, p in sym:
                 trainExamples.append([b, self.curPlayer, p, None])
 
-            action = np.random.choice(len(pi), p=pi)
-            p_action = pi[action]
+            action : int = np.random.choice(len(pi), p=pi)
+            p_action : float = pi[action]
 
-            strs = []
+            action_prob_strs : list[str] = []
             for i, p in sorted(list(enumerate(pi)), key = lambda pair: pair[1], reverse=True):
                 if p != 0:
-                    strs.append(f"({self.game.convert_action_to_readable(i)}, {round(p, 3)})")
+                    action_prob_strs.append(f"({self.game.convert_action_to_readable(i)}, {round(p, 3)})")
 
-            if self.verbose:
-                self.log(f"\t***** MCTS (NN V{nn_version} | TURN {episodeStep}): TAKE ACTION! Based on final probs, take action: {action} (p = {round(p_action * 100, 3)}%), state_value = {round(state_value, 3)} *****", print_to_terminal = new_nn_version)
-                self.log(f"\tpi: {', '.join(strs)}")
+            self.log(f"***** MCTS (NN V{nn_version} | TURN {episodeStep} | temp = {temp}): pi: {', '.join(action_prob_strs[:3])} => 4: {action} (p = {round(p_action * 100, 3)}%), state_value = {round(state_value, 3)} *****", print_to_terminal = new_nn_version)
+            self.log(f"\tpi: {', '.join(action_prob_strs)}")
 
-            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action, m_or_b, print_to_terminal = new_nn_version)
+            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action, m_or_b, print_to_terminal = True)
             time3 = time.time()
 
             if episodeStep == 1:
                 self.first_temp = temp
-                self.first_prob_strs = strs
+                self.first_prob_strs = action_prob_strs
                 self.first_action = action
                 self.first_nn_value = self.nnet.predict(self.game.getCanonicalForm(None, self.curPlayer, m_or_b))
                 # self.log(f"NN (next line) on state: {self.game.getCanonicalForm(None, self.curPlayer, m_or_b)}", debug_file_path="./logs/init_state_examples.txt")
 
-            r = self.game.getGameEnded(board, self.curPlayer, m_or_b, print_to_terminal = new_nn_version)
+            r = self.game.getGameEnded(board, self.curPlayer, m_or_b, print_to_terminal = True)
 
             time4 = time.time()
 
@@ -169,7 +143,7 @@ class Coach():
                 elif self.game.states[m_or_b].scores[3 - self.curPlayer] > self.game.states[m_or_b].scores[self.curPlayer]:
                     r = -1
                 else:
-                    return [(x[0], x[2], -1) for x in trainExamples]
+                    return [(x[0], x[2], 0) for x in trainExamples]
 
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
 
@@ -213,7 +187,7 @@ class Coach():
         self.debug_file_path_suffix = f"_{(num_iter // 5) * 5}_{(num_iter // 5) * 5 + 4}"
 
         if num_iter % 5 == 0:
-            self.clear_logs()
+            logger.clear_log_file()
 
         # bookkeeping
         log.info(f'Starting Iter #{num_iter} ...')
@@ -239,7 +213,7 @@ class Coach():
             
             Policy: {','.join(policy_strs)}
                 on state: {self.game.getCanonicalForm(None, 1, "main")}
-            """, debug_file_path="./logs/init_state_examples.txt")
+            """)
         else:
             new_nn_version = False
 
@@ -248,29 +222,25 @@ class Coach():
         self.log(f"""
         ########### NEW ROUND #############
         {sorted_data}
-        """, debug_file_path="./logs/init_state_examples.txt")
+        """)
 
         # examples of the iteration
         if not self.skipFirstSelfPlay or num_iter > 1:
             iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
             for game_num in tqdm(range(self.args.numEps), desc="Self Play"):
-                if self.display_all:
-                    self.verbose = True
-                elif game_num != self.args.numEps - 1:
-                    self.verbose = False
+                if game_num != self.args.numEps - 1:
+                    logger.set_verbose(False)
                 else:
-                    self.verbose = True
-                self.game.verbose = self.verbose
+                    logger.set_verbose(True)
 
-                if self.verbose:
-                    self.log(f"##### COACH SELF-PLAY ROUND {num_iter} | NN VERSION {n_accepted} | GAME {game_num} #####")
+                self.log(f"##### COACH SELF-PLAY ROUND {num_iter} | NN VERSION {n_accepted} | GAME {game_num} #####")
 
-                self.mcts = MCTS(self.game, self.nnet, self.args, verbose=self.verbose, output = self.output, debug_file_path=self.debug_file_path, display_time=self.display_time)  # reset search tree
+                self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
 
                 # Run an episode of self-play
                 start_time = time.time()
-                currentTrainExamples = self.executeEpisode(round_number=num_iter, game_number=game_num, nn_version=n_accepted, new_nn_version=True)
+                currentTrainExamples = self.executeEpisode(nn_version=n_accepted, new_nn_version=True)
 
                 pi = currentTrainExamples[0][1]
                 r = currentTrainExamples[0][2]
@@ -300,8 +270,8 @@ class Coach():
                         wins = 0
                     self.first_action_dict[action_s] = (1, wins, round(wins/1, 2), self.first_nn_value[1] * -1)
 
-                self.log(f"""R: {r}, A: {action_s}, temp: {self.first_temp}, NN: {self.first_nn_value[1] * -1}""", debug_file_path="./logs/init_state_examples.txt")
-                self.log(f"\t{self.first_prob_strs}", debug_file_path="./logs/init_state_examples.txt")
+                self.log(f"""R: {r}, A: {action_s}, temp: {self.first_temp}, NN: {self.first_nn_value[1] * -1}""")
+                self.log(f"\t{self.first_prob_strs}")
 
 
                 # self.log(f"""
@@ -309,15 +279,13 @@ class Coach():
                 # R: {r}
                 # """, debug_file_path="./logs/init_state_examples.txt")
 
-                if self.verbose:    
-                    self.explainTrainExamples(currentTrainExamples)
+                self.explainTrainExamples(currentTrainExamples)
                 iterationTrainExamples += currentTrainExamples
-                if self.display_time:
-                    print(f"ONE GAME: {round(time.time() - start_time, 2 )}s")
-                    print(self.times)
-                    print(self.game.times)
-                    print(self.mcts.times)
-                    self.reset_times()
+
+            if self.args.debug_self_play_with_temp_0:
+                self.log("########## Playing one round of self-play with temp = 0 ##########", print_to_terminal = True)
+                # Just for debugging, play one round of self-play with temp = 0
+                self.executeEpisode(nn_version=n_accepted, new_nn_version=True, temp_override=0)
 
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
@@ -341,10 +309,10 @@ class Coach():
         # training new network, keeping a copy of the old one
         self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
         self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-        pmcts = MCTS(self.game, self.pnet, self.args, verbose=self.verbose, output = self.output, debug_file_path=self.debug_file_path)
+        pmcts = MCTS(self.game, self.pnet, self.args)
 
         self.nnet.train(trainExamples)
-        nmcts = MCTS(self.game, self.nnet, self.args, verbose=self.verbose, output = self.output, debug_file_path=self.debug_file_path)
+        nmcts = MCTS(self.game, self.nnet, self.args)
 
         self.game.reset_main()
 
@@ -371,7 +339,7 @@ class Coach():
         self.log(f"""
         Post-train Policy: {','.join(policy_strs)}
         Value of taking kk: {v_taking_kk * -1}
-        """, debug_file_path="./logs/init_state_examples.txt")
+        """)
 
         # self.log(f"""
         # Post-train Policy: {','.join(policy_strs)}
@@ -391,12 +359,9 @@ class Coach():
 
         # self.mcts.verbose = False
         # self.game.verbose = False
-        arena = Arena(lambda player, verbose_override: np.argmax(pmcts.getActionProb(player, temp=0, verbose_override=verbose_override)),
-                      lambda player, verbose_override: np.argmax(nmcts.getActionProb(player, temp=0, verbose_override=verbose_override)),
-                      self.game,
-                      verbose = self.verbose,
-                      output= self.output,
-                      debug_file_path= self.debug_file_path)
+        arena = Arena(lambda player: np.argmax(pmcts.getActionProb(player, temp=0)),
+                      lambda player: np.argmax(nmcts.getActionProb(player, temp=0)),
+                      self.game)
         pwins, nwins, draws = arena.playGames(self.args.arenaCompare)
         
         # Store arena results

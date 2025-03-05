@@ -2,6 +2,8 @@ import logging
 import math
 import time
 
+from Logger import logger, LoggingSource
+
 import numpy as np
 import pandas as pd
 
@@ -28,7 +30,7 @@ class MCTS():
     This class handles the MCTS tree.
     """
 
-    def __init__(self, game, nnet, args, verbose = False, output = "file", debug_file_path = None, display_time = False):
+    def __init__(self, game, nnet, args):
         self.game = game
         self.nnet = nnet
         self.args = args
@@ -39,16 +41,10 @@ class MCTS():
 
         self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
-        self.verbose = verbose
-
-        self.output = output
-
-        self.debug_file_path = debug_file_path
 
         self.times = {}
         self.reset_times()
 
-        self.display_time = display_time
 
     def reset_times(self):
         self.times = {
@@ -60,18 +56,10 @@ class MCTS():
             'valid': 0.0
         }
 
-    def log(self, s):
-        if self.verbose:
-            if self.output == 'file':
-                if self.debug_file_path is None:
-                    raise ValueError("debug_file_path is not set")
-                with open(self.debug_file_path, 'a') as f:
-                    f.write(f"{s}\n")
+    def log(self, s, print_to_terminal = False):
+        logger.log(s, source=LoggingSource.MCTS, print_to_terminal=print_to_terminal)
 
-            elif self.output == 'print':
-                print(s)
-
-    def getActionProb(self, player, temp=1, verbose_override = None):
+    def getActionProb(self, player, temp=1) -> list[float]:
         """
         This function performs numMCTSSims simulations of MCTS starting from
         canonicalBoard.
@@ -81,39 +69,16 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
 
-        past_verbose = self.verbose
-
-        if verbose_override is not None:
-            self.verbose = verbose_override
-
-        if self.verbose:
-            self.log(f"MCTS: Get the best action by running MCTS {self.args.numMCTSSims} times")
+        self.log(f"MCTS: Get the best action by running MCTS {self.args.numMCTSSims} times")
 
         action_start_time = time.time()
 
         # Perform MCTS search numMCTSSims times
         for i in range(self.args.numMCTSSims):
-            if self.verbose:
-                self.log(f"\n\t########## MCTS: Search iteration {i} #########\n")
-                self.log(f"\t\tMCTS: Reloading new branch")
+            self.log(f"\n\t########## MCTS: Search iteration {i} #########\n")
+            self.log(f"\t\tMCTS: Reloading new branch")
 
             self.game.reset_branch()
-            if self.verbose:
-                tabs = "\t\t"
-                canonicalBoard = self.game.getCanonicalForm(None, player, 'branch')
-                # self.log(f"""
-                # {tabs}\t board: {canonicalBoard[:90]}
-                # {tabs}\t reserved 1: {canonicalBoard[90:180]}
-                # {tabs}\t reserved 2: {canonicalBoard[180:270]}
-                # {tabs}\t perma_gems 1:  {canonicalBoard[270:275]}
-                # {tabs}\t perma_gems 2:  {canonicalBoard[275:280]}
-                # {tabs}\t coins 1:  {canonicalBoard[280:286]}
-                # {tabs}\t coins 2:  {canonicalBoard[286:292]}
-                # {tabs}\t score 1:  {canonicalBoard[292]}
-                # {tabs}\t score 2:  {canonicalBoard[293]}
-                # {tabs}\t started_first:  {canonicalBoard[294]}
-                # {tabs}\t nobles:  {canonicalBoard[295:305]}
-                # """)
 
             self.search(player, depth = 0, did_nothing_last_recursion = False)
 
@@ -126,16 +91,11 @@ class MCTS():
         s = self.game.stringRepresentation(player, m_or_b)
         counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.getActionSize())]
 
-        if self.display_time:
-            print(f"Finding an action took: {round(time.time() - action_start_time, 3)}s")
-
-        self.verbose = past_verbose
-
         if temp == 0:
             bestAs = np.array(np.argwhere(counts == np.max(counts))).flatten()
             bestA = np.random.choice(bestAs)
-            probs = [0] * len(counts)
-            probs[bestA] = 1
+            probs = [0.0] * len(counts)
+            probs[bestA] = 1.0
             return probs
 
         counts = [x ** (1. / temp) for x in counts]
@@ -170,8 +130,7 @@ class MCTS():
 
         time0 = time.time()
 
-        if self.verbose and depth > 0:
-            self.game.display_game_state(m_or_b)
+        self.game.display_game_state(m_or_b)
 
         # Q: why does this function return negative of value of the current state?
         # A: because it's called recursively by the previous state. That previous state
@@ -274,8 +233,7 @@ class MCTS():
 
         time4 = time.time()
 
-        if self.verbose:
-            self.game.display_valid_moves(player, m_or_b)
+        self.game.display_valid_moves(player, m_or_b)
 
         # pick the action with the highest upper confidence bound
 

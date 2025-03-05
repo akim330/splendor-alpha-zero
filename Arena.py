@@ -1,16 +1,17 @@
 import logging
 
 from tqdm import tqdm
+from splendor.SplendorGame import SplendorGame
 
 log = logging.getLogger(__name__)
-
+from Logger import logger, LoggingSource
 
 class Arena():
     """
     An Arena class where any 2 agents can be pitted against each other.
     """
 
-    def __init__(self, player1, player2, game, display=None, verbose = False, output = "print", debug_file_path = None):
+    def __init__(self, player1, player2, game: SplendorGame):
         """
         Input:
             player 1,2: two functions that takes board as input, return action
@@ -25,22 +26,11 @@ class Arena():
         self.player1 = player1
         self.player2 = player2
         self.game = game
-        self.display = display
 
-        self.verbose = verbose
-        self.output = output
-        self.debug_file_path = debug_file_path
+    def log(self, s, print_to_terminal=False):
+        logger.log(s, source=LoggingSource.ARENA, print_to_terminal=print_to_terminal)
 
-    def log(self, s):
-        if self.verbose:
-            if self.output == 'file':
-                with open(self.debug_file_path, 'a') as f:
-                    f.write(f"{s}\n")
-
-            elif self.output == 'print':
-                print(s)
-
-    def playGame(self, n_game, verbose=False):
+    def playGame(self, n_game):
         """
         Executes one episode of a game.
 
@@ -50,6 +40,7 @@ class Arena():
             or
                 draw result returned from the game that is neither 1, -1, nor 0.
         """
+        game = SplendorGame()
         self.game.reset_main()
         m_or_b = 'main'
 
@@ -66,7 +57,7 @@ class Arena():
             #     self.display(board)
             # print(f"Player: {curPlayer}")
             #action = players[curPlayer + 1](self.game.getCanonicalForm(board, curPlayer, m_or_b))
-            action = players[arenaCurPlayer + 1](akCurPlayer, self.verbose)
+            action = players[arenaCurPlayer + 1](akCurPlayer)
             self.log(f"ARENA GAME {n_game}: TURN {it} PLAYER {arenaCurPlayer} TAKES ACTION!: {action}")
 
             #valids = self.game.getValidMoves(self.game.getCanonicalForm(board, curPlayer, m_or_b), 1)
@@ -84,7 +75,7 @@ class Arena():
         #     print("Game over: Turn ", str(it), "Result ", str(self.game.getGameEnded(board, 1, m_or_b)))
         #     self.display(board)
 
-        return arenaCurPlayer * self.game.getGameEnded(None, akCurPlayer, m_or_b)
+        return arenaCurPlayer * self.game.getGameEnded(None, akCurPlayer, m_or_b, print_to_terminal = False) # type: ignore
 
     def playGames(self, num):
         """
@@ -102,18 +93,16 @@ class Arena():
         twoWon = 0
         draws = 0
         for i in tqdm(range(num), desc="Arena.playGames (1)"):
+            if i == 0:
+                logger.set_verbose(True)
+            else:
+                logger.set_verbose(False)
+            
             self.log(f"###########################################")
             self.log(f"###### ARENA GAME {i} for player 1 ########")
             self.log(f"###########################################")
 
-            if i == 0:
-                self.verbose = True
-                self.game.verbose = True
-            else:
-                self.verbose = False
-                self.game.verbose = False
-
-            gameResult = self.playGame(n_game = i, verbose=self.verbose)
+            gameResult = self.playGame(n_game = i)
             if gameResult == 1:
                 oneWon += 1
             elif gameResult == -1:
@@ -124,11 +113,16 @@ class Arena():
         self.player1, self.player2 = self.player2, self.player1
 
         for i in tqdm(range(num), desc="Arena.playGames (2)"):
+            if i == 0:
+                logger.set_verbose(True)
+            else:
+                logger.set_verbose(False)
+
             self.log(f"###########################################")
             self.log(f"###### ARENA GAME {i} for player 2 ########")
             self.log(f"###########################################")
 
-            gameResult = self.playGame(n_game = i, verbose=self.verbose)
+            gameResult = self.playGame(n_game = i)
             if gameResult == -1:
                 oneWon += 1
             elif gameResult == 1:

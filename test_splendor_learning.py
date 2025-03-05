@@ -7,6 +7,7 @@ import numpy as np
 from collections import deque
 from contextlib import redirect_stdout
 from typing import Callable, Any
+from Logger import logger
 
 from Coach import Coach
 from splendor.SplendorGame import SplendorGame as Game
@@ -57,19 +58,22 @@ class TestSplendorLearning(unittest.TestCase):
         # Track arena results and game lengths
         self.arena_results = []  # Will store (iteration, wins, losses, draws)
         self.game_lengths = []   # Will store game lengths for each arena game
+
+        # Set up logger
+        logger.configure(log_file_path="./temp/test_splendor_learning.log", verbose=False)
         
         # Create game instance with all output suppressed
-        self.game = Game(game_variant=self.args.game_type, verbose=False, output="file", debug_file_path="./temp/game.log")
+        self.game = Game(game_variant=self.args.game_type)
         
         # Create neural network
         self.nnet = nn(self.game)
         
         # Create coach with all output suppressed
-        self.coach = Coach(self.game, self.nnet, self.args, verbose=False, output="file", debug_file_path="./temp/coach.log")
+        self.coach = Coach(self.game, self.nnet, self.args)
         
         # Patch the arena playGame method to track game lengths
         self.original_playGame = self.coach.game.getGameEnded
-        def patched_getGameEnded(board, player, m_or_b, print_to_terminal=False):
+        def patched_getGameEnded(board, player, m_or_b, print_to_terminal = False):
             result = self.original_playGame(board, player, m_or_b, print_to_terminal)
             if result != 0 and hasattr(self.game, 'states') and 'main' in self.game.states:
                 # Only track completed games

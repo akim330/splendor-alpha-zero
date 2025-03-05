@@ -19,6 +19,8 @@ import time
 
 from splendor.config import SplendorConfig, SplendorGameVariant
 
+from Logger import logger, LoggingSource
+
 import os
 
 
@@ -51,24 +53,15 @@ class SplendorGame():
     def __init__(
         self, 
         game_variant : SplendorGameVariant = SplendorGameVariant.VANILLA, 
-        verbose : bool = False, 
-        output : str = "print", 
-        debug_file_path : str | None = None, 
-        display_time : bool = False, 
         randomize : bool = True
     ):
-        self.verbose : bool = verbose
         self.config : SplendorConfig = SplendorConfig.get_config(game_variant)
 
         self.states = {}
-        self.output : str = output
-        self.debug_file_path : str | None = debug_file_path
 
         self.randomize : bool = randomize
 
         self.current_valid_moves = []
-
-        self.display_time : bool = display_time
 
         self.n_actions : int = self.config.n_cards * 2 + 33 + 1
 
@@ -105,17 +98,7 @@ class SplendorGame():
         }
 
     def log(self, s : str, print_to_terminal : bool = False):
-        if self.verbose:
-            if self.output == 'file':
-                if self.debug_file_path is None:
-                    raise ValueError("debug_file_path is None but output is 'file'")
-                with open(self.debug_file_path, 'a') as f:
-                    f.write(f"{s}\n")
-            if print_to_terminal:   
-                print(s)
-
-            elif self.output == 'print':
-                print(s)
+        logger.log(s, source=LoggingSource.GAME, print_to_terminal=print_to_terminal)
 
     def reset_main(self):
         self.reset_times()
@@ -392,7 +375,7 @@ class SplendorGame():
 
         # print(f"DEBUG: getting next state for {m_or_b}")
 
-        action_str = "" # For logging
+        action_str = "\t" # For logging
 
         if action < 0:
             raise Exception("Action can't be negative")
@@ -569,7 +552,7 @@ class SplendorGame():
 
         self.times['next'] += time.time() - start_time
 
-        self.log("\t" + action_str, print_to_terminal = print_to_terminal and self.verbose)
+        self.log(action_str, print_to_terminal = print_to_terminal)
 
         return None, self.switch_player(player)
 
@@ -769,11 +752,11 @@ class SplendorGame():
 
         # print(f"#### ARE THERE CONSECUTIVE DO NOTHINGS? {self.states[m_or_b].consecutive_do_nothings}")
         if self.states[m_or_b].consecutive_do_nothings >= 2:
-            self.log("Game ended on consecutive do nothings!", print_to_terminal = print_to_terminal and self.verbose)
+            self.log("Game ended on consecutive do nothings!", print_to_terminal = print_to_terminal)
             return -2
 
         if np.sum(self.current_valid_moves) == 0: # type: ignore
-            self.log(f"Game ended on no valid moves!", print_to_terminal = print_to_terminal and self.verbose)
+            self.log(f"Game ended on no valid moves!", print_to_terminal = print_to_terminal)
             return -1
 
         if player == 2:
@@ -788,19 +771,19 @@ class SplendorGame():
                     player_gems = self.dict_values_sum(self.states[m_or_b].perma_gems[player])
                     opponent_gems = self.dict_values_sum(self.states[m_or_b].perma_gems[opponent])
                     if player_gems > opponent_gems:
-                        self.log(log_string + f"Tied but player {player} has more permanent gems! -> Player {opponent} wins", print_to_terminal = print_to_terminal and self.verbose)
+                        self.log(log_string + f"Tied but player {player} has more permanent gems! -> Player {opponent} wins", print_to_terminal = print_to_terminal)
                         return -1
                     elif player_gems < opponent_gems:
-                        self.log(log_string + f"Tied but player {opponent} has more permanent gems! -> Player {player} wins", print_to_terminal = print_to_terminal and self.verbose)
+                        self.log(log_string + f"Tied but player {opponent} has more permanent gems! -> Player {player} wins", print_to_terminal = print_to_terminal)
                         return 1
                     else:
-                        self.log(log_string + "Tied and both players have the same number of permanent gems! -> Draw", print_to_terminal = print_to_terminal and self.verbose)
+                        self.log(log_string + "Tied and both players have the same number of permanent gems! -> Draw", print_to_terminal = print_to_terminal)
                         return -2
                 elif self.states[m_or_b].scores[player] > self.states[m_or_b].scores[opponent]:
-                    self.log(log_string + f"Player {player} wins", print_to_terminal = print_to_terminal and self.verbose)
+                    self.log(log_string + f"Player {player} wins", print_to_terminal = print_to_terminal)
                     return 1
                 elif self.states[m_or_b].scores[player] < self.states[m_or_b].scores[opponent]:
-                    self.log(log_string + f"Player {opponent} wins", print_to_terminal = print_to_terminal and self.verbose)
+                    self.log(log_string + f"Player {opponent} wins", print_to_terminal = print_to_terminal)
                     return -1
                 else:
                     raise Exception(f"""
