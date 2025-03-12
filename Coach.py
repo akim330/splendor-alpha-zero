@@ -164,6 +164,8 @@ class Coach():
             self.num_workers = min(self.args.numWorkers, self.args.numEps)
         else:
             self.num_workers = min(self.args.numEps, os.cpu_count() or 4)
+
+        print(f"num_workers: {self.num_workers}")
             
         self.pool = None
         
